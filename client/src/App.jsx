@@ -1,37 +1,52 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+
+// Pages
 import Home from './pages/Home';
+import Login from './pages/Login';
+import Register from './pages/Register';
 import Locations from './pages/Locations';
 import BookingFlow from './pages/BookingFlow';
 import Ticket from './pages/Ticket';
 import StaffPortal from './pages/StaffPortal';
 import AdminDashboard from './pages/AdminDashboard';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import MyBookings from './pages/MyBookings';
 
-export default function App() {
+function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="min-h-screen flex flex-col bg-[#F7F8F6]">
-          <Navbar />
-          <main className="flex-1">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/locations" element={<Locations />} />
-              <Route path="/book/:slug" element={<BookingFlow />} />
+    <Router>
+      <div className="flex flex-col min-h-screen bg-neutral-950 text-white">
+        <Navbar />
+        
+        {/* Main Content Area */}
+        <main className="flex-grow">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/locations" element={<Locations />} />
+
+            <Route element={<ProtectedRoute allowedRoles={['customer', 'staff', 'admin']} />}>
+              <Route path="/book/:locationId" element={<BookingFlow />} />
               <Route path="/ticket/:bookingRef" element={<Ticket />} />
+            </Route>
+
+            <Route element={<ProtectedRoute allowedRoles={['staff', 'admin']} />}>
               <Route path="/staff" element={<StaffPortal />} />
+            </Route>
+
+            <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
               <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/my-bookings" element={<MyBookings />} />
-            </Routes>
-          </main>
-        </div>
-      </Router>
-    </AuthProvider>
+            </Route>
+          </Routes>
+        </main>
+
+        <Footer />
+      </div>
+    </Router>
   );
 }
+
+export default App;
