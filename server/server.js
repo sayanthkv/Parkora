@@ -8,23 +8,27 @@ connectDB();
 
 const app = express();
 
-// Allowed Origins Array
+// Clean trailing slashes from environment variable and allowed origins
+const cleanOrigin = (url) => url ? url.replace(/\/+$/, '') : '';
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  process.env.CLIENT_URL, // e.g. https://client-theta-puce-20.vercel.app
+  cleanOrigin(process.env.CLIENT_URL),
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow non-browser requests (Postman, curl, server-to-server)
+      // Allow requests with no origin (Postman, mobile apps)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      const normalizedOrigin = cleanOrigin(origin);
+
+      if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
         return callback(null, true);
       } else {
-        return callback(new Error('Not allowed by CORS policy'));
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
       }
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
