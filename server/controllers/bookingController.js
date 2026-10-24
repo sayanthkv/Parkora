@@ -2,9 +2,9 @@ const crypto = require('crypto');
 const Booking = require('../models/Booking');
 const ParkingLocation = require('../models/ParkingLocation');
 
-// @desc    Create a new parking reservation (atomic concurrency safe)
+// @desc    Create a reservation with exact price calculation
 // @route   POST /api/bookings
-// @access  Private (Customer / Admin)
+// @access  Private (Customer)
 exports.createBooking = async (req, res) => {
   try {
     const { locationId, floorId, bayId, vehicleRegNumber, vehicleType, startTime, endTime } = req.body;
@@ -12,30 +12,21 @@ exports.createBooking = async (req, res) => {
     const reqStart = new Date(startTime);
     const reqEnd = new Date(endTime);
 
-    if (!locationId || !floorId || !bayId || !vehicleRegNumber) {
-      return res.status(400).json({ success: false, message: 'Please provide all required fields' });
-    }
-
     if (reqStart >= reqEnd) {
       return res.status(400).json({ success: false, message: 'End time must be after start time' });
     }
 
-    if (reqStart < new Date(Date.now() - 5 * 60 * 1000)) {
-      return res.status(400).json({ success: false, message: 'Start time cannot be in the past' });
-    }
-
-    // 1. Calculate price on the server (never trust client amount)
     const location = await ParkingLocation.findById(locationId);
     if (!location || !location.isActive) {
       return res.status(404).json({ success: false, message: 'Parking facility is inactive or unavailable' });
     }
 
+    // Exact Pricing Formula: Hourly Rate x Duration Hours
     const durationMs = reqEnd.getTime() - reqStart.getTime();
     const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
-    const totalAmount = location.pricing.baseRate + durationHours * location.pricing.hourlyRate;
+    const totalAmount = durationHours * location.pricing.hourlyRate; // Exactly 25 * 2 = 50
 
-    // 2. Atomic interval overlap validation
-    // Overlap formula: A_start < B_end AND B_start < A_end
+    // Concurrency check for overlapping intervals
     const existingConflict = await Booking.findOne({
       bay: bayId,
       status: { $in: ['confirmed', 'active', 'pending'] },
@@ -52,7 +43,6 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // 3. Generate reference & QR payload
     const bookingRef = `KSP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
     const qrToken = crypto
       .createHash('sha256')
@@ -74,7 +64,7 @@ exports.createBooking = async (req, res) => {
       status: 'confirmed',
       pricingSnapshot: {
         hourlyRate: location.pricing.hourlyRate,
-        baseFee: location.pricing.baseRate,
+        baseFee: 0,
         durationHours,
         totalAmount,
       },
@@ -97,9 +87,9 @@ exports.createBooking = async (req, res) => {
   }
 };
 
-// @desc    Get logged in user's bookings
+// @desc    Get user's booking history
 // @route   GET /api/bookings/my
-// @access  Private (Customer / Admin)
+// @access  Private (Customer)
 exports.getMyBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({ user: req.user.id })
@@ -116,7 +106,7 @@ exports.getMyBookings = async (req, res) => {
 
 // @desc    Cancel an upcoming booking
 // @route   PATCH /api/bookings/:id/cancel
-// @access  Private (Customer / Admin)
+// @access  Private (Customer)
 exports.cancelBooking = async (req, res) => {
   try {
     const booking = await Booking.findOne({ _id: req.params.id, user: req.user.id });

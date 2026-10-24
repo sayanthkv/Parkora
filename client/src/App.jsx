@@ -5,6 +5,11 @@ import Home from './pages/Home';
 import Locations from './pages/Locations';
 import BookingFlow from './pages/BookingFlow';
 import Ticket from './pages/Ticket';
+import StaffPortal from './pages/StaffPortal';
+import AdminDashboard from './pages/AdminDashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import MyBookings from './pages/MyBookings';
 
 export default function App() {
   return (
@@ -18,6 +23,11 @@ export default function App() {
               <Route path="/locations" element={<Locations />} />
               <Route path="/book/:slug" element={<BookingFlow />} />
               <Route path="/ticket/:bookingRef" element={<Ticket />} />
+              <Route path="/staff" element={<StaffPortal />} />
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/my-bookings" element={<MyBookings />} />
             </Routes>
           </main>
         </div>

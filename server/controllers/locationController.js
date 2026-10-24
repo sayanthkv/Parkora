@@ -15,7 +15,7 @@ exports.getLocations = async (req, res) => {
   }
 };
 
-// @desc    Get single location by Mongo ID or slug
+// @desc    Get single location by ID or slug
 // @route   GET /api/locations/:id
 // @access  Public
 exports.getLocationById = async (req, res) => {
@@ -36,12 +36,12 @@ exports.getLocationById = async (req, res) => {
   }
 };
 
-// @desc    Get real-time bay availability grid for a floor and time window
+// @desc    Get floor bays with interval availability
 // @route   GET /api/locations/:locationId/floors/:floorId/bays
 // @access  Public
 exports.getFloorBaysWithAvailability = async (req, res) => {
   try {
-    const { locationId, floorId } = req.params;
+    const { floorId } = req.params;
     const { startTime, endTime, vehicleType } = req.query;
 
     if (!startTime || !endTime) {
@@ -54,14 +54,7 @@ exports.getFloorBaysWithAvailability = async (req, res) => {
     const reqStart = new Date(startTime);
     const reqEnd = new Date(endTime);
 
-    if (reqStart >= reqEnd) {
-      return res.status(400).json({
-        success: false,
-        message: 'endTime must be strictly after startTime',
-      });
-    }
-
-    // Build filter for bays on this floor
+    // Query active bays for floor
     const bayFilter = { floor: floorId, isEnabled: true, status: 'active' };
     if (vehicleType && vehicleType !== 'all') {
       bayFilter.supportedVehicleType = vehicleType;
@@ -70,7 +63,7 @@ exports.getFloorBaysWithAvailability = async (req, res) => {
     const bays = await ParkingBay.find(bayFilter).sort('bayNumber');
     const bayIds = bays.map((b) => b._id);
 
-    // Overlap condition: (booking.startTime < reqEnd) AND (booking.endTime > reqStart)
+    // Check interval overlap: A_start < B_end AND B_start < A_end
     const overlappingBookings = await Booking.find({
       bay: { $in: bayIds },
       status: { $in: ['confirmed', 'active', 'pending'] },

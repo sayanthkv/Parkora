@@ -3,8 +3,8 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import API from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
-  MapPin, Calendar, Clock, Car, ShieldCheck, CheckCircle2,
-  AlertCircle, ArrowRight, ArrowLeft, Zap, Info
+  MapPin, Clock, ArrowRight, ArrowLeft, Zap, Info,
+  CheckCircle2, AlertCircle
 } from 'lucide-react';
 
 export default function BookingFlow() {
@@ -13,30 +13,25 @@ export default function BookingFlow() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Step state: 1 = Details & Floor, 2 = Bay Grid, 3 = Review & Confirm
   const [step, setStep] = useState(1);
 
-  // Facility & Floor Data
   const [location, setLocation] = useState(null);
   const [floors, setFloors] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState(null);
   const [bays, setBays] = useState([]);
 
-  // User Selections
   const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState(searchParams.get('startTime') || '09:00');
+  const [startTime, setStartTime] = useState(searchParams.get('startTime') || '14:00'); // 24-hr default
   const [durationHours, setDurationHours] = useState(searchParams.get('durationHours') || '2');
   const [vehicleType, setVehicleType] = useState(searchParams.get('vehicleType') || 'car');
   const [vehicleReg, setVehicleReg] = useState(user?.vehicles?.[0]?.regNumber || 'KL 13 AS 1234');
   const [selectedBay, setSelectedBay] = useState(null);
 
-  // Async States
   const [loading, setLoading] = useState(true);
   const [loadingBays, setLoadingBays] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  // 1. Fetch Location & Floors
   useEffect(() => {
     const fetchLocationData = async () => {
       try {
@@ -55,14 +50,12 @@ export default function BookingFlow() {
     fetchLocationData();
   }, [slug]);
 
-  // Compute ISO Start/End Dates
   const getStartAndEndDates = () => {
     const start = new Date(`${date}T${startTime}`);
     const end = new Date(start.getTime() + parseInt(durationHours) * 60 * 60 * 1000);
     return { start, end };
   };
 
-  // 2. Fetch Bay Availability Grid when Floor or Time Window changes
   useEffect(() => {
     if (!location || !selectedFloor) return;
 
@@ -92,7 +85,6 @@ export default function BookingFlow() {
     fetchBayAvailability();
   }, [selectedFloor, date, startTime, durationHours, vehicleType]);
 
-  // Handle Booking Creation
   const handleConfirmBooking = async () => {
     if (!user) {
       navigate(`/login?redirect=/book/${slug}`);
@@ -116,12 +108,11 @@ export default function BookingFlow() {
         endTime: end.toISOString(),
       });
 
-      // Navigate directly to generated ticket
       navigate(`/ticket/${res.data.data.bookingRef}`);
     } catch (err) {
       if (err.response?.status === 409) {
         setError('Bay conflict: This bay was reserved just now. Please pick another bay.');
-        setStep(2); // Kick back to bay grid
+        setStep(2);
       } else {
         setError(err.response?.data?.message || 'Failed to confirm reservation.');
       }
@@ -134,12 +125,11 @@ export default function BookingFlow() {
   if (!location) return <div className="py-20 text-center text-red-600">Location not found.</div>;
 
   const { start, end } = getStartAndEndDates();
-  const calculatedTotal = location.pricing.baseRate + parseInt(durationHours) * location.pricing.hourlyRate;
+  const calculatedTotal = parseInt(durationHours) * location.pricing.hourlyRate; // Exact rate
 
   return (
     <div className="min-h-screen bg-[#F7F8F6] py-8 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
       
-      {/* Top Header */}
       <div className="mb-6">
         <button
           onClick={() => navigate('/locations')}
@@ -153,7 +143,6 @@ export default function BookingFlow() {
         </p>
       </div>
 
-      {/* Step Indicator */}
       <div className="bg-white rounded-xl border border-gray-200/80 p-4 mb-6 flex items-center justify-between">
         <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? 'text-[#176B4D]' : 'text-gray-400'}`}>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center border text-xs ${step >= 1 ? 'bg-[#176B4D] text-white border-[#176B4D]' : 'border-gray-300'}`}>1</span>
@@ -178,7 +167,7 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 1: Time Window & Vehicle Parameters */}
+      {/* STEP 1: Time Window in 24-Hour Format */}
       {step === 1 && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200/80 space-y-6">
           <h2 className="text-base font-bold text-[#202722]">Step 1: Enter Schedule & Vehicle Details</h2>
@@ -196,7 +185,9 @@ export default function BookingFlow() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Arrival Time</label>
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                Arrival Time (24-Hour Format)
+              </label>
               <input
                 type="time"
                 value={startTime}
@@ -256,18 +247,17 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 2: Interactive Bay Selection Grid */}
+      {/* STEP 2: Expanded Bay Grid (20-30 Slots) */}
       {step === 2 && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200/80 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
             <div>
               <h2 className="text-base font-bold text-[#202722]">Step 2: Choose Your Parking Bay</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Interval: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({durationHours} hrs)
+                24-Hr Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} - {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
               </p>
             </div>
 
-            {/* Floor Tabs */}
             <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-lg">
               {floors.map((fl) => (
                 <button
@@ -284,7 +274,6 @@ export default function BookingFlow() {
             </div>
           </div>
 
-          {/* Bay Legend */}
           <div className="flex items-center gap-6 text-xs text-gray-600 bg-[#F7F8F6] p-3 rounded-lg border border-gray-200/60">
             <div className="flex items-center gap-2">
               <span className="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-600" /> Available
@@ -297,7 +286,6 @@ export default function BookingFlow() {
             </div>
           </div>
 
-          {/* Interactive Grid */}
           {loadingBays ? (
             <div className="py-12 text-center text-xs text-gray-500">Checking bay availability...</div>
           ) : (
@@ -352,7 +340,7 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 3: Review & Final Confirmation */}
+      {/* STEP 3: Exact Pricing Summary */}
       {step === 3 && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200/80 space-y-6">
           <h2 className="text-base font-bold text-[#202722]">Step 3: Review Reservation Summary</h2>
@@ -371,8 +359,10 @@ export default function BookingFlow() {
               <span className="font-mono font-bold text-[#202722]">{vehicleReg}</span>
             </div>
             <div className="flex justify-between border-b border-gray-200/60 pb-2">
-              <span className="text-gray-500">Interval Window:</span>
-              <span className="font-semibold text-[#202722]">{start.toLocaleString()} to {end.toLocaleTimeString()}</span>
+              <span className="text-gray-500">Interval Window (24-Hr):</span>
+              <span className="font-semibold text-[#202722]">
+                {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} - {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+              </span>
             </div>
             <div className="flex justify-between border-b border-gray-200/60 pb-2">
               <span className="text-gray-500">Hourly Rate x Hours:</span>
