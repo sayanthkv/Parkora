@@ -3,30 +3,31 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 
-// Load env vars
 dotenv.config();
-
-// Connect to MongoDB
 connectDB();
 
 const app = express();
 
-// Middleware
 app.use(express.json());
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
 
+// Route Imports
+const authRoutes = require('./routes/authRoutes');
+const locationRoutes = require('./routes/locationRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
+const staffRoutes = require('./routes/staffRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+
+// Mount Routers
+app.use('/api/auth', authRoutes);
+app.use('/api/locations', locationRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/admin', adminRoutes);
+
 // Healthcheck Route
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Parkora API Server is operational' });
-});
-
-// Error handling middleware fallback
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.statusCode || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-  });
+  res.status(200).json({ status: 'OK', message: 'Parkora Backend API Operational' });
 });
 
 const PORT = process.env.PORT || 5000;
