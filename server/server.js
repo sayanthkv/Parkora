@@ -17,6 +17,7 @@ const locationRoutes = require('./routes/locationRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const errorHandler = require('./middleware/errorHandler');
 
 // Mount Routers
 app.use('/api/auth', authRoutes);
@@ -24,6 +25,7 @@ app.use('/api/locations', locationRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/admin', adminRoutes);
+app.use(errorHandler);
 
 // Healthcheck Route
 app.get('/api/health', (req, res) => {
