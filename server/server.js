@@ -15,6 +15,7 @@ const allowedOrigins = [
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
+// CORS middleware handles both standard requests AND OPTIONS preflight requests
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -31,9 +32,6 @@ app.use(
     credentials: true,
   })
 );
-
-// Explicit wildcard handler compatible with Express v5 / path-to-regexp v8
-app.options('(.*)', cors());
 
 app.use(express.json());
 
