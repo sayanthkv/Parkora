@@ -12,13 +12,12 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  process.env.CLIENT_URL, // e.g. https://client-theta-puce-20.vercel.app
+  process.env.CLIENT_URL,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, or Postman)
       if (!origin) return callback(null, true);
       
       if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
@@ -33,8 +32,8 @@ app.use(
   })
 );
 
-// Explicitly handle HTTP OPTIONS preflight requests for all routes
-app.options('*', cors());
+// Explicit wildcard handler compatible with Express v5 / path-to-regexp v8
+app.options('(.*)', cors());
 
 app.use(express.json());
 
