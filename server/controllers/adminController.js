@@ -2,6 +2,7 @@ const User = require('../models/User');
 const ParkingLocation = require('../models/ParkingLocation');
 const ParkingBay = require('../models/ParkingBay');
 const Booking = require('../models/Booking');
+const bcrypt = require('bcryptjs');
 
 // @desc    Get system-wide overview metrics
 // @route   GET /api/admin/metrics
@@ -36,26 +37,40 @@ exports.getAdminMetrics = async (req, res) => {
   }
 };
 
-// @desc    Create a new parking facility
+// @desc    Create a new parking facility (Handles Multer Cloudinary Upload)
 // @route   POST /api/admin/locations
 // @access  Private (Admin)
 exports.createLocation = async (req, res) => {
   try {
-    const location = await ParkingLocation.create(req.body);
+    const locationData = { ...req.body };
+
+    // If Cloudinary file was uploaded via Multer, capture URL
+    if (req.file) {
+      locationData.imageUrl = req.file.path;
+    }
+
+    const location = await ParkingLocation.create(locationData);
     res.status(201).json({ success: true, data: location });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Update a parking facility
+// @desc    Update a parking facility (Handles Multer Cloudinary Upload)
 // @route   PUT /api/admin/locations/:id
 // @access  Private (Admin)
 exports.updateLocation = async (req, res) => {
   try {
+    const updateData = { ...req.body };
+
+    // If a new Cloudinary image file was uploaded via Multer
+    if (req.file) {
+      updateData.imageUrl = req.file.path;
+    }
+
     const location = await ParkingLocation.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -92,7 +107,7 @@ exports.deleteLocation = async (req, res) => {
   }
 };
 
-// @desc    Create a new staff account
+// @desc    Create a new staff account (Hashes Password via bcrypt)
 // @route   POST /api/admin/staff
 // @access  Private (Admin)
 exports.createStaff = async (req, res) => {
@@ -104,10 +119,14 @@ exports.createStaff = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email already exists.' });
     }
 
+    // Hash the password securely with 10 salt rounds
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     const staff = await User.create({
       name,
       email,
-      passwordHash: password,
+      passwordHash: hashedPassword,
       phone,
       role: 'staff',
       assignedFacility,

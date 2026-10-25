@@ -36,6 +36,10 @@ export default function AdminDashboard() {
     imageUrl: '',
   });
 
+  // Raw File States for Cloudinary Uploads
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [editSelectedFile, setEditSelectedFile] = useState(null);
+
   const [newStaff, setNewStaff] = useState({
     name: '',
     email: '',
@@ -80,23 +84,29 @@ export default function AdminDashboard() {
     fetchAdminData();
   }, []);
 
-  // Image Upload Handlers
+  // Image Upload Handlers (Stores both File Object for API and Base64 for Preview)
   const handleImageChange = (e, targetForm = 'new') => {
     const file = e.target.files[0];
     if (file) {
+      if (targetForm === 'new') {
+        setSelectedFile(file);
+      } else {
+        setEditSelectedFile(file);
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         if (targetForm === 'new') {
-          setNewLocation({ ...newLocation, imageUrl: reader.result });
+          setNewLocation((prev) => ({ ...prev, imageUrl: reader.result }));
         } else {
-          setEditingFacility({ ...editingFacility, imageUrl: reader.result });
+          setEditingFacility((prev) => ({ ...prev, imageUrl: reader.result }));
         }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Create Facility
+  // Create Facility with Multipart FormData
   const handleCreateLocation = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -104,24 +114,28 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      const payload = {
-        name: newLocation.name,
-        slug: newLocation.slug || newLocation.name.toLowerCase().replace(/\s+/g, '-'),
-        imageUrl: newLocation.imageUrl || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800',
-        address: {
-          street: newLocation.street,
-          area: newLocation.area,
-          city: 'Kannur',
-          state: 'Kerala',
-        },
-        coordinates: { lat: Number(newLocation.lat), lng: Number(newLocation.lng) },
-        pricing: { hourlyRate: Number(newLocation.hourlyRate), baseRate: Number(newLocation.baseRate) },
-        supportedVehicleTypes: ['car', 'bike', 'ev'],
-        amenities: ['CCTV', 'Security Guard', 'Covered Parking'],
-      };
+      const formData = new FormData();
+      formData.append('name', newLocation.name);
+      formData.append('slug', newLocation.slug || newLocation.name.toLowerCase().replace(/\s+/g, '-'));
+      formData.append('address[street]', newLocation.street);
+      formData.append('address[area]', newLocation.area);
+      formData.append('address[city]', 'Kannur');
+      formData.append('address[state]', 'Kerala');
+      formData.append('pricing[hourlyRate]', Number(newLocation.hourlyRate));
+      formData.append('pricing[baseRate]', Number(newLocation.baseRate));
+      formData.append('coordinates[lat]', Number(newLocation.lat));
+      formData.append('coordinates[lng]', Number(newLocation.lng));
 
-      await API.post('/admin/locations', payload);
-      setMessage('New parking facility created successfully.');
+      if (selectedFile) {
+        formData.append('imageUrl', selectedFile);
+      }
+
+      await API.post('/admin/locations', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setMessage('New parking facility created successfully with Cloudinary storage.');
+      setSelectedFile(null);
       setNewLocation({ name: '', slug: '', street: '', area: '', hourlyRate: 30, baseRate: 20, lat: 11.8689, lng: 75.3725, imageUrl: '' });
       fetchAdminData();
     } catch (err) {
@@ -131,7 +145,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Update Facility
+  // Update Facility with Multipart FormData
   const handleUpdateLocation = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -139,23 +153,25 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      const payload = {
-        name: editingFacility.name,
-        imageUrl: editingFacility.imageUrl || editingFacility.image,
-        address: {
-          street: editingFacility.address?.street || editingFacility.street,
-          area: editingFacility.address?.area || editingFacility.area,
-          city: 'Kannur',
-          state: 'Kerala',
-        },
-        pricing: {
-          hourlyRate: Number(editingFacility.pricing?.hourlyRate ?? editingFacility.hourlyRate),
-          baseRate: Number(editingFacility.pricing?.baseRate ?? editingFacility.baseRate),
-        },
-      };
+      const formData = new FormData();
+      formData.append('name', editingFacility.name);
+      formData.append('address[street]', editingFacility.address?.street || editingFacility.street || '');
+      formData.append('address[area]', editingFacility.address?.area || editingFacility.area || '');
+      formData.append('address[city]', 'Kannur');
+      formData.append('address[state]', 'Kerala');
+      formData.append('pricing[hourlyRate]', Number(editingFacility.pricing?.hourlyRate ?? editingFacility.hourlyRate));
+      formData.append('pricing[baseRate]', Number(editingFacility.pricing?.baseRate ?? editingFacility.baseRate));
 
-      await API.put(`/admin/locations/${editingFacility._id}`, payload);
-      setMessage('Facility updated successfully.');
+      if (editSelectedFile) {
+        formData.append('imageUrl', editSelectedFile);
+      }
+
+      await API.put(`/admin/locations/${editingFacility._id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setMessage('Facility updated successfully with Cloudinary storage.');
+      setEditSelectedFile(null);
       setEditingFacility(null);
       fetchAdminData();
     } catch (err) {
@@ -424,7 +440,10 @@ export default function AdminDashboard() {
                     <img src={newLocation.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
-                      onClick={() => setNewLocation({ ...newLocation, imageUrl: '' })}
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setNewLocation((prev) => ({ ...prev, imageUrl: '' }));
+                      }}
                       className="absolute top-2 right-2 p-1 bg-slate-900/80 text-white rounded-full"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -530,7 +549,10 @@ export default function AdminDashboard() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditingFacility(loc)}
+                        onClick={() => {
+                          setEditSelectedFile(null);
+                          setEditingFacility(loc);
+                        }}
                         className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200"
                         title="Edit Facility"
                       >
@@ -665,7 +687,10 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 sm:p-8 space-y-4 shadow-2xl relative">
             <button
-              onClick={() => setEditingFacility(null)}
+              onClick={() => {
+                setEditSelectedFile(null);
+                setEditingFacility(null);
+              }}
               className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full"
             >
               <X className="w-4 h-4" />

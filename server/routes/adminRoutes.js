@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { upload } = require('../config/cloudinary');
 const {
   getAdminMetrics,
   createLocation,
@@ -13,9 +14,12 @@ const {
 } = require('../controllers/adminController');
 
 router.get('/metrics', getAdminMetrics);
-router.post('/locations', createLocation);
-router.put('/locations/:id', updateLocation);
+
+// Align field name with 'imageUrl' or 'image' based on your form payload
+router.post('/locations', upload.single('imageUrl'), createLocation);
+router.put('/locations/:id', upload.single('imageUrl'), updateLocation);
 router.delete('/locations/:id', deleteLocation);
+
 router.get('/bookings', getAllBookings);
 
 // Staff management endpoints
