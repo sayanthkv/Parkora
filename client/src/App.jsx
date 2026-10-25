@@ -14,6 +14,7 @@ import Ticket from './pages/Ticket';
 import StaffPortal from './pages/StaffPortal';
 import AdminDashboard from './pages/AdminDashboard';
 import MyBookings from './pages/MyBookings';
+import Profile from './pages/Profile';
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
               <Route path="/book/:slug" element={<BookingFlow />} />
               <Route path="/ticket/:bookingRef" element={<Ticket />} />
               <Route path="/my-bookings" element={<MyBookings />} />
+              <Route path="/profile" element={<Profile />} />
             </Route>
 
             {/* Staff Only Routes */}

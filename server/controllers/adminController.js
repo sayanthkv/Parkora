@@ -12,7 +12,7 @@ exports.getAdminMetrics = async (req, res) => {
     const totalBays = await ParkingBay.countDocuments();
     const totalBookings = await Booking.countDocuments();
     const activeBookings = await Booking.countDocuments({ status: 'active' });
-    
+
     // Revenue sum from completed bookings
     const revenueData = await Booking.aggregate([
       { $match: { status: 'completed' } },
@@ -48,6 +48,50 @@ exports.createLocation = async (req, res) => {
   }
 };
 
+// @desc    Update a parking facility
+// @route   PUT /api/admin/locations/:id
+// @access  Private (Admin)
+exports.updateLocation = async (req, res) => {
+  try {
+    const location = await ParkingLocation.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!location) {
+      return res.status(404).json({ success: false, message: 'Parking facility not found.' });
+    }
+
+    res.status(200).json({ success: true, data: location });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete a parking facility
+// @route   DELETE /api/admin/locations/:id
+// @access  Private (Admin)
+exports.deleteLocation = async (req, res) => {
+  try {
+    const location = await ParkingLocation.findByIdAndDelete(req.params.id);
+
+    if (!location) {
+      return res.status(404).json({ success: false, message: 'Parking facility not found.' });
+    }
+
+    // Unassign staff members attached to this facility
+    await User.updateMany(
+      { assignedFacility: req.params.id },
+      { $unset: { assignedFacility: "" } }
+    );
+
+    res.status(200).json({ success: true, message: 'Parking facility deleted successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Create a new staff account
 // @route   POST /api/admin/staff
 // @access  Private (Admin)
@@ -77,6 +121,89 @@ exports.createStaff = async (req, res) => {
         email: staff.email,
         assignedFacility: staff.assignedFacility,
       },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all staff members
+// @route   GET /api/admin/staff
+// @access  Private (Admin)
+exports.getStaffMembers = async (req, res) => {
+  try {
+    const staff = await User.find({ role: 'staff' })
+      .select('-passwordHash')
+      .populate('assignedFacility', 'name address');
+
+    res.status(200).json({
+      success: true,
+      count: staff.length,
+      data: staff,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Assign or Reassign facility to a staff operator
+// @route   PATCH /api/admin/staff/:staffId/assign
+// @access  Private (Admin)
+exports.assignStaffFacility = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const { facilityId } = req.body;
+
+    if (facilityId) {
+      await User.updateMany(
+        { assignedFacility: facilityId, role: 'staff' },
+        { $unset: { assignedFacility: "" } }
+      );
+    }
+
+    const staff = await User.findByIdAndUpdate(
+      staffId,
+      { assignedFacility: facilityId },
+      { new: true }
+    )
+      .select('-passwordHash')
+      .populate('assignedFacility', 'name address');
+
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Staff facility reassigned successfully.',
+      data: staff,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Deactivate a staff account
+// @route   PATCH /api/admin/staff/:staffId/deactivate
+// @access  Private (Admin)
+exports.deactivateStaff = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+
+    const staff = await User.findByIdAndUpdate(
+      staffId,
+      { isActive: false, $unset: { assignedFacility: "" } },
+      { new: true }
+    ).select('-passwordHash');
+
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Staff operator deactivated successfully.',
+      data: staff,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

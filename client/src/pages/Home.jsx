@@ -1,39 +1,34 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, ArrowRight } from 'lucide-react';
+import { MapPin, ArrowRight, Building } from 'lucide-react';
 import { motion } from 'framer-motion';
+import API from '../api/axios';
 
-const KANNUR_LOCATIONS = [
-  {
-    id: 'knr-railway',
-    name: 'Kannur Railway Station',
-    area: 'Station Road, Thavakkara',
-    image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=800',
-    price: 25,
-    totalBays: 40,
-    availableBays: 14,
-  },
-  {
-    id: 'thavakkara-ksrtc',
-    name: 'Kannur KSRTC Bus Stand',
-    area: 'Thavakkara Road',
-    image: 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&q=80&w=800',
-    price: 20,
-    totalBays: 30,
-    availableBays: 8,
-  },
-  {
-    id: 'payyambalam-beach',
-    name: 'Payyambalam Beach Visitor Parking',
-    area: 'Beach Road, Kannur',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800',
-    price: 15,
-    totalBays: 50,
-    availableBays: 22,
-  },
-];
+const DEFAULT_FACILITY_IMAGE = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800';
 
 const Home = () => {
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLocations = async () => {
+      try {
+        const response = await API.get('/locations');
+        // Handles both res.data.data or direct array res.data
+        const locationData = Array.isArray(response.data)
+          ? response.data
+          : (response.data?.data || []);
+        setLocations(locationData);
+      } catch (err) {
+        console.error('Failed to load home page locations:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLocations();
+  }, []);
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -44,8 +39,6 @@ const Home = () => {
       
       {/* HERO SECTION WITH BACKDROP IMAGE */}
       <section className="relative min-h-[85vh] flex flex-col justify-between pt-36 pb-24 overflow-hidden">
-        
-        {/* Backdrop Image */}
         <div className="absolute inset-0 z-0">
           <img
             src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=1920"
@@ -55,7 +48,6 @@ const Home = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/55 to-slate-950/75" />
         </div>
 
-        {/* Central Hero Text */}
         <motion.div 
           initial={{ opacity: 0, y: 25 }}
           animate={{ opacity: 1, y: 0 }}
@@ -100,51 +92,30 @@ const Home = () => {
           className="relative z-20 max-w-5xl mx-auto px-4 w-full -mb-32 sm:-mb-24"
         >
           <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-3xl shadow-xl p-8 sm:p-10 grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-slate-200">
-            
             <div className="text-center px-4 pt-4 md:pt-0">
-              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">
-                200+
-              </h2>
-              <h3 className="font-heading font-bold text-base text-slate-800 mt-2">
-                Active Parking Bays
-              </h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Railway Station, KSRTC Stand, and Beach complexes in Kannur.
-              </p>
+              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">200+</h2>
+              <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Active Parking Bays</h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Railway Station, KSRTC Stand, and Beach complexes in Kannur.</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
-              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-emerald-600">
-                100%
-              </h2>
-              <h3 className="font-heading font-bold text-base text-slate-800 mt-2">
-                Real-Time Guarantee
-              </h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Non-overlapping interval calculations validated server-side.
-              </p>
+              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-emerald-600">100%</h2>
+              <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Real-Time Guarantee</h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Non-overlapping interval calculations validated server-side.</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
-              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">
-                05
-              </h2>
-              <h3 className="font-heading font-bold text-base text-slate-800 mt-2">
-                Major Transit Hubs
-              </h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Instant gate check-in via digital QR pass scanning.
-              </p>
+              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">05</h2>
+              <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Major Transit Hubs</h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Instant gate check-in via digital QR pass scanning.</p>
             </div>
-
           </div>
         </motion.div>
       </section>
 
-      {/* SPACING ADJUSTMENT */}
       <div className="pt-36 sm:pt-28" />
 
-      {/* LOCATIONS PREVIEW GRID (Target for Kannur Hubs button) */}
+      {/* DYNAMIC LOCATIONS PREVIEW GRID */}
       <section id="coverage" className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-28">
         <div className="text-center max-w-xl mx-auto mb-12">
           <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3.5 py-1 rounded-full border border-emerald-200">
@@ -158,46 +129,76 @@ const Home = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {KANNUR_LOCATIONS.map((loc, index) => (
-            <motion.div 
-              key={loc.id} 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              whileHover={{ y: -4 }}
-              className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md"
-            >
-              <div className="relative h-48 bg-slate-100 overflow-hidden">
-                <img src={loc.image} alt={loc.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
-                <div className="absolute top-3.5 right-3.5 bg-slate-900 text-emerald-400 font-bold text-xs px-3 py-1 rounded-full">
-                  ₹{loc.price}/hr
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="bg-white border border-slate-200 rounded-3xl h-80 animate-pulse p-4 flex flex-col justify-between">
+                <div className="bg-slate-200 h-44 rounded-2xl" />
+                <div className="space-y-2">
+                  <div className="bg-slate-200 h-4 rounded w-3/4" />
+                  <div className="bg-slate-200 h-3 rounded w-1/2" />
                 </div>
               </div>
-              <div className="p-6">
-                <h3 className="font-heading font-bold text-lg text-slate-900">{loc.name}</h3>
-                <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                  <MapPin className="h-3.5 w-3.5 text-emerald-600" /> {loc.area}
-                </p>
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-semibold">
-                  <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                    {loc.availableBays} of {loc.totalBays} Free
-                  </span>
-                  <Link
-                    to="/locations"
-                    className="text-slate-900 font-bold flex items-center gap-1 hover:text-emerald-600 transition-colors"
-                  >
-                    Select Bay <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {locations.slice(0, 3).map((loc, index) => {
+              // Read imageUrl (matches schema) with fallback to legacy image or default
+              const displayImg = loc.imageUrl || loc.image || DEFAULT_FACILITY_IMAGE;
+
+              return (
+                <motion.div 
+                  key={loc._id || loc.id} 
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  whileHover={{ y: -4 }}
+                  className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="relative h-48 bg-slate-100 overflow-hidden">
+                      <img 
+                        src={displayImg} 
+                        alt={loc.name} 
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
+                      />
+                      <div className="absolute top-3.5 right-3.5 bg-slate-900 text-emerald-400 font-bold text-xs px-3 py-1 rounded-full shadow-md">
+                        ₹{loc.pricing?.hourlyRate || loc.price || 30}/hr
+                      </div>
+                    </div>
+
+                    <div className="p-6">
+                      <h3 className="font-heading font-bold text-lg text-slate-900">{loc.name}</h3>
+                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                        <MapPin className="h-3.5 w-3.5 text-emerald-600 shrink-0" /> 
+                        {loc.address?.street ? `${loc.address.street}, ${loc.address.area}` : (loc.area || 'Kannur')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-6 pt-0">
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-semibold">
+                      <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                        {loc.availableBaysCount ?? loc.availableBays ?? 12} Free Bays
+                      </span>
+                      <Link
+                        to="/locations"
+                        className="text-slate-900 font-bold flex items-center gap-1 hover:text-emerald-600 transition-colors"
+                      >
+                        Select Bay <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
-      {/* HOW IT WORKS SECTION (Target for How It Works button) */}
+      {/* HOW IT WORKS SECTION */}
       <section id="how-it-works" className="py-16 bg-white border-t border-slate-200 scroll-mt-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-xl mx-auto mb-12">

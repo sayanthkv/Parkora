@@ -23,6 +23,7 @@ const cleanOrigin = (url) => (url ? url.replace(/\/+$/, '') : '');
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://127.0.0.1:5173',
   cleanOrigin(process.env.CLIENT_URL),
 ].filter(Boolean);
 
@@ -30,11 +31,16 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, or Postman)
       if (!origin) return callback(null, true);
 
       const normalizedOrigin = cleanOrigin(origin);
 
-      if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
+      if (
+        allowedOrigins.includes(normalizedOrigin) ||
+        allowedOrigins.includes('*') ||
+        process.env.NODE_ENV !== 'production' // Always allow any localhost in development mode
+      ) {
         return callback(null, true);
       } else {
         return callback(new Error(`CORS blocked for origin: ${origin}`));
@@ -46,11 +52,17 @@ app.use(
   })
 );
 
-// 3. Rate Limiting Middleware
-// General API Rate Limiter (100 requests per 15 minutes per IP)
+// 3. Payload Size Limit (Increased to allow base64 image uploads)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// 4. Rate Limiting Middleware (Skipped automatically during local testing)
+const isDev = process.env.NODE_ENV !== 'production';
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  skip: () => isDev, // Don't rate limit while testing locally
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -59,10 +71,10 @@ const apiLimiter = rateLimit({
   },
 });
 
-// Strict Rate Limiter for Authentication Routes (10 attempts per 15 minutes per IP)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  skip: () => isDev, // Don't block repetitive auth tests locally
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -71,9 +83,7 @@ const authLimiter = rateLimit({
   },
 });
 
-app.use(express.json({ limit: '10kb' })); // Restrict request payload size
-
-// 4. Mount Routers with Rate Limiters
+// 5. Mount Routers
 app.use('/api/auth', authLimiter, require('./routes/authRoutes'));
 app.use('/api/locations', apiLimiter, require('./routes/locationRoutes'));
 app.use('/api/bookings', apiLimiter, require('./routes/bookingRoutes'));

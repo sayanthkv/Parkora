@@ -51,7 +51,7 @@ const Navbar = () => {
       <div className="fixed top-5 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto font-body">
         <nav className="bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-sm rounded-full px-7 py-3 flex items-center justify-between transition-all duration-300">
           
-          {/* Minimal Text Brand (Navigates Home & Scrolls Top) */}
+          {/* Minimal Text Brand */}
           <button 
             type="button" 
             onClick={handleNavHome} 
@@ -116,9 +116,21 @@ const Navbar = () => {
           <div className="hidden md:flex items-center space-x-3">
             {user ? (
               <div className="flex items-center space-x-2">
-                <span className="text-xs font-semibold text-slate-800 bg-slate-100 px-3.5 py-2 rounded-full border border-slate-200 flex items-center gap-1.5">
-                  <User className="h-3.5 w-3.5 text-emerald-600" /> {user.name || user.email}
-                </span>
+                {/* Clicking username navigates to /profile (only if not admin) */}
+                {user.role !== 'admin' ? (
+                  <Link
+                    to="/profile"
+                    className="text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-full border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="View & Edit Profile"
+                  >
+                    <User className="h-3.5 w-3.5 text-emerald-600" /> {user.name || user.email}
+                  </Link>
+                ) : (
+                  <span className="text-xs font-semibold text-slate-800 bg-slate-100 px-3.5 py-2 rounded-full border border-slate-200 flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-emerald-600" /> {user.name || user.email}
+                  </span>
+                )}
+
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -220,6 +232,16 @@ const Navbar = () => {
               </Link>
             )}
 
+            {user && user.role !== 'admin' && (
+              <Link
+                to="/profile"
+                onClick={() => setMenuOpen(false)}
+                className="block text-sm font-medium text-emerald-600 py-1.5"
+              >
+                Profile & Settings
+              </Link>
+            )}
+
             <div className="pt-3 border-t border-slate-100 flex flex-col space-y-2">
               {!user ? (
                 <>
@@ -252,7 +274,6 @@ const Navbar = () => {
         )}
       </div>
 
-      {/* Backdrop overlay for closing menu on click outside */}
       {menuOpen && (
         <div 
           className="fixed inset-0 z-40 bg-black/10 md:hidden" 
