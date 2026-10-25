@@ -31,16 +31,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] flex items-center justify-center pt-28 pb-16 px-4 sm:px-6 lg:px-8 font-body">
-      <div className="max-w-md w-full bg-white p-8 sm:p-10 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
+    <div className="min-h-screen bg-white text-slate-900 flex items-center justify-center pt-28 pb-16 px-4 sm:px-6 lg:px-8 font-body">
+      <div className="max-w-md w-full bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-sm space-y-6">
         <div>
-          <span className="text-xs font-bold uppercase tracking-widest text-[#0B3D2E] bg-[#E3DED2]/60 px-3.5 py-1.5 rounded-full inline-block mb-3">
+          <span className="text-xs font-bold uppercase tracking-widest text-[#0B3D2E] bg-slate-100 px-3.5 py-1.5 rounded-full inline-block mb-3 border border-slate-200">
             Account Access
           </span>
-          <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#14201B] tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">
             Sign In to Parkora
           </h2>
-          <p className="text-xs text-[#5C6B64] mt-1.5 font-medium">
+          <p className="text-xs text-slate-500 mt-1.5 font-medium">
             Manage your reservations and QR parking passes.
           </p>
         </div>
@@ -54,7 +54,7 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">
+            <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Email Address
             </label>
             <input
@@ -62,13 +62,13 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. user@example.com"
-              className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               required
             />
           </div>
 
           <div>
-            <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">
+            <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Password
             </label>
             <input
@@ -76,7 +76,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               required
             />
           </div>
@@ -91,14 +91,14 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="pt-2 border-t border-[#E3DED2] text-center text-xs text-[#5C6B64] font-medium">
+        <div className="pt-2 border-t border-slate-200 text-center text-xs text-slate-500 font-medium">
           Don't have an account?{' '}
           <Link to="/register" className="text-[#0B3D2E] font-bold hover:underline">
             Register here
           </Link>
         </div>
 
-        <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#5C6B64] pt-1">
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 pt-1">
           <ShieldCheck className="w-3.5 h-3.5 text-[#0B3D2E]" />
           <span>Encrypted JWT Authentication</span>
         </div>

@@ -74,7 +74,7 @@ const Home = () => {
           <div className="pt-2">
             <Link
               to="/locations"
-              className="inline-flex items-center gap-2 bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-bold text-sm px-8 py-3.5 rounded-full transition-all duration-300 shadow-lg active:scale-95"
+              className="inline-flex items-center gap-2 bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-bold text-sm px-8 py-3.5 rounded-full transition-all duration-300 shadow-lg active:scale-95 cursor-pointer"
             >
               Find Parking Bays <ArrowRight className="h-4 w-4" />
             </Link>
@@ -144,8 +144,8 @@ const Home = () => {
       {/* SPACING ADJUSTMENT */}
       <div className="pt-36 sm:pt-28" />
 
-      {/* LOCATIONS PREVIEW GRID */}
-      <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* LOCATIONS PREVIEW GRID (Target for Kannur Hubs button) */}
+      <section id="coverage" className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-28">
         <div className="text-center max-w-xl mx-auto mb-12">
           <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3.5 py-1 rounded-full border border-emerald-200">
             Featured Locations
@@ -197,8 +197,8 @@ const Home = () => {
         </div>
       </section>
 
-      {/* HOW IT WORKS SECTION */}
-      <section id="how-it-works" className="py-16 bg-white border-t border-slate-200">
+      {/* HOW IT WORKS SECTION (Target for How It Works button) */}
+      <section id="how-it-works" className="py-16 bg-white border-t border-slate-200 scroll-mt-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-xl mx-auto mb-12">
             <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3.5 py-1 rounded-full border border-emerald-200">

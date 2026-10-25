@@ -43,18 +43,18 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] flex items-center justify-center pt-28 pb-16 px-4 sm:px-6 lg:px-8 font-body">
-      <div className="max-w-md w-full bg-white p-8 sm:p-10 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
+    <div className="min-h-screen bg-white text-slate-900 flex items-center justify-center pt-28 pb-16 px-4 sm:px-6 lg:px-8 font-body">
+      <div className="max-w-md w-full bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-sm space-y-6">
         
         {/* Header */}
         <div>
           <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-3">
             <ShieldCheck className="w-3.5 h-3.5" /> Fast Parking Reservation
           </div>
-          <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#14201B] tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">
             Create Your Account
           </h2>
-          <p className="text-xs text-[#5C6B64] mt-1.5 font-medium">
+          <p className="text-xs text-slate-500 mt-1.5 font-medium">
             Register to pre-book parking slots across Kannur.
           </p>
         </div>
@@ -69,78 +69,78 @@ export default function Register() {
         {/* Signup Form */}
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Full Name</label>
+            <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
             <input
               type="text"
               placeholder="e.g. Sayanth Sajeevan"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               required
             />
           </div>
 
           <div>
-            <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Email Address</label>
+            <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
             <input
               type="email"
               placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               required
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Password</label>
+              <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                 required
               />
             </div>
 
             <div>
-              <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Mobile Number</label>
+              <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">Mobile Number</label>
               <input
                 type="tel"
                 placeholder="+91 9876543210"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               />
             </div>
           </div>
 
           {/* Vehicle Profile Sub-section */}
-          <div className="pt-3 border-t border-[#E3DED2] space-y-3">
-            <span className="text-[11px] font-bold text-[#5C6B64] uppercase tracking-wider flex items-center gap-1.5">
+          <div className="pt-3 border-t border-slate-200 space-y-3">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
               <Car className="w-3.5 h-3.5 text-[#0B3D2E]" /> Primary Vehicle Info
             </span>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Vehicle Reg Number</label>
+                <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vehicle Reg Number</label>
                 <input
                   type="text"
                   placeholder="KL 13 AS 1234"
                   value={vehicleRegNumber}
                   onChange={(e) => setVehicleRegNumber(e.target.value.toUpperCase())}
-                  className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-bold tracking-wider uppercase text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold tracking-wider uppercase text-slate-900 outline-none focus:border-[#0B3D2E]"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Vehicle Type</label>
+                <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vehicle Type</label>
                 <select
                   value={vehicleType}
                   onChange={(e) => setVehicleType(e.target.value)}
-                  className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E] cursor-pointer"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E] cursor-pointer"
                 >
                   <option value="car">Car / SUV</option>
                   <option value="bike">Two Wheeler</option>
@@ -160,7 +160,7 @@ export default function Register() {
           </button>
         </form>
 
-        <div className="pt-2 border-t border-[#E3DED2] text-center text-xs text-[#5C6B64] font-medium">
+        <div className="pt-2 border-t border-slate-200 text-center text-xs text-slate-500 font-medium">
           Already registered?{' '}
           <Link to={`/login${redirect !== '/locations' ? `?redirect=${redirect}` : ''}`} className="text-[#0B3D2E] font-bold hover:underline">
             Sign in here

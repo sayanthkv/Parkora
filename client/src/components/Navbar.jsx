@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X, ChevronDown, User, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,6 +7,7 @@ const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const currentLocation = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -14,32 +15,86 @@ const Navbar = () => {
     navigate('/');
   };
 
+  // Helper for navigating home and scrolling to top
+  const handleNavHome = () => {
+    setMenuOpen(false);
+    if (currentLocation.pathname === '/') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      navigate('/');
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+    }
+  };
+
+  // Helper for navigating to home sections (#how-it-works, #coverage) from any page
+  const handleNavSection = (sectionId) => {
+    setMenuOpen(false);
+    const scrollFn = () => {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    };
+
+    if (currentLocation.pathname === '/') {
+      scrollFn();
+    } else {
+      navigate('/');
+      setTimeout(scrollFn, 150);
+    }
+  };
+
   return (
     <>
-      <div className="fixed top-5 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+      <div className="fixed top-5 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto font-body">
         <nav className="bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-sm rounded-full px-7 py-3 flex items-center justify-between transition-all duration-300">
           
-          {/* Minimal Text Brand */}
-          <Link to="/" onClick={() => setMenuOpen(false)} className="group focus:outline-none">
+          {/* Minimal Text Brand (Navigates Home & Scrolls Top) */}
+          <button 
+            type="button" 
+            onClick={handleNavHome} 
+            className="group focus:outline-none text-left cursor-pointer"
+          >
             <span className="font-heading font-extrabold text-2xl text-slate-900 tracking-tight group-hover:text-emerald-600 transition-colors">
               Parkora
             </span>
-          </Link>
+          </button>
 
           {/* Center Links (Desktop) */}
           <div className="hidden md:flex items-center space-x-9 text-sm font-medium text-slate-700">
-            <Link to="/" className="hover:text-slate-900 transition-colors duration-200">
+            <button
+              type="button"
+              onClick={handleNavHome}
+              className="hover:text-slate-900 transition-colors duration-200 cursor-pointer"
+            >
               Home
-            </Link>
-            <Link to="/locations" className="hover:text-slate-900 transition-colors duration-200 flex items-center gap-1">
+            </button>
+
+            <Link 
+              to="/locations" 
+              className="hover:text-slate-900 transition-colors duration-200 flex items-center gap-1"
+            >
               Locations <ChevronDown className="h-3.5 w-3.5 opacity-50" />
             </Link>
-            <a href="#how-it-works" className="hover:text-slate-900 transition-colors duration-200">
+
+            <button
+              type="button"
+              onClick={() => handleNavSection('how-it-works')}
+              className="hover:text-slate-900 transition-colors duration-200 cursor-pointer"
+            >
               How It Works
-            </a>
-            <a href="#coverage" className="hover:text-slate-900 transition-colors duration-200">
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavSection('coverage')}
+              className="hover:text-slate-900 transition-colors duration-200 cursor-pointer"
+            >
               Kannur Hubs
-            </a>
+            </button>
+
             {user && (
               <Link to="/my-bookings" className="hover:text-slate-900 transition-colors duration-200">
                 My Bookings
@@ -105,30 +160,62 @@ const Navbar = () => {
         {/* Mobile Menu Drawer */}
         {menuOpen && (
           <div className="md:hidden mt-3 bg-white/95 backdrop-blur-lg border border-slate-200 rounded-2xl p-6 shadow-xl space-y-3">
-            <Link to="/" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+            <button
+              type="button"
+              onClick={handleNavHome}
+              className="block w-full text-left text-sm font-medium text-slate-800 py-1.5 cursor-pointer"
+            >
               Home
-            </Link>
-            <Link to="/locations" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+            </button>
+
+            <Link 
+              to="/locations" 
+              onClick={() => setMenuOpen(false)} 
+              className="block text-sm font-medium text-slate-800 py-1.5"
+            >
               Locations
             </Link>
-            <a href="#how-it-works" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+
+            <button
+              type="button"
+              onClick={() => handleNavSection('how-it-works')}
+              className="block w-full text-left text-sm font-medium text-slate-800 py-1.5 cursor-pointer"
+            >
               How It Works
-            </a>
-            <a href="#coverage" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavSection('coverage')}
+              className="block w-full text-left text-sm font-medium text-slate-800 py-1.5 cursor-pointer"
+            >
               Kannur Hubs
-            </a>
+            </button>
+
             {user && (
-              <Link to="/my-bookings" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+              <Link 
+                to="/my-bookings" 
+                onClick={() => setMenuOpen(false)} 
+                className="block text-sm font-medium text-slate-800 py-1.5"
+              >
                 My Bookings
               </Link>
             )}
             {user?.role === 'staff' && (
-              <Link to="/staff" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+              <Link 
+                to="/staff" 
+                onClick={() => setMenuOpen(false)} 
+                className="block text-sm font-medium text-slate-800 py-1.5"
+              >
                 Staff Portal
               </Link>
             )}
             {user?.role === 'admin' && (
-              <Link to="/admin" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+              <Link 
+                to="/admin" 
+                onClick={() => setMenuOpen(false)} 
+                className="block text-sm font-medium text-slate-800 py-1.5"
+              >
                 Admin Console
               </Link>
             )}
@@ -136,10 +223,18 @@ const Navbar = () => {
             <div className="pt-3 border-t border-slate-100 flex flex-col space-y-2">
               {!user ? (
                 <>
-                  <Link to="/login" onClick={() => setMenuOpen(false)} className="w-full text-center text-xs font-semibold text-slate-800 border border-slate-200 py-2.5 rounded-full">
+                  <Link 
+                    to="/login" 
+                    onClick={() => setMenuOpen(false)} 
+                    className="w-full text-center text-xs font-semibold text-slate-800 border border-slate-200 py-2.5 rounded-full"
+                  >
                     Sign In
                   </Link>
-                  <Link to="/locations" onClick={() => setMenuOpen(false)} className="w-full text-center text-xs font-semibold text-white bg-slate-900 py-2.5 rounded-full">
+                  <Link 
+                    to="/locations" 
+                    onClick={() => setMenuOpen(false)} 
+                    className="w-full text-center text-xs font-semibold text-white bg-slate-900 py-2.5 rounded-full"
+                  >
                     Book Slot
                   </Link>
                 </>
