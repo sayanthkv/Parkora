@@ -87,7 +87,7 @@ export default function BookingFlow() {
 
   const handleConfirmBooking = async () => {
     if (!user) {
-      navigate(`/login?redirect=/book/${slug}`);
+      navigate(`/login?redirect=${encodeURIComponent(`/book/${slug}`)}`);
       return;
     }
 
@@ -110,7 +110,15 @@ export default function BookingFlow() {
 
       navigate(`/ticket/${res.data.data.bookingRef}`);
     } catch (err) {
-      if (err.response?.status === 409) {
+      if (err.response?.status === 401 || err.response?.data?.message?.includes('token')) {
+        setError('Your session has expired. Please log in again to complete your reservation.');
+        // Clear both possible storage keys to prevent invalid token persistence
+        localStorage.removeItem('parkora_token');
+        localStorage.removeItem('token');
+        setTimeout(() => {
+          navigate(`/login?redirect=${encodeURIComponent(`/book/${slug}`)}`);
+        }, 1200);
+      } else if (err.response?.status === 409) {
         setError('Bay conflict: This bay was reserved just now. Please pick another bay.');
         setStep(2);
       } else {
@@ -125,7 +133,7 @@ export default function BookingFlow() {
   if (!location) return <div className="py-28 text-center text-red-600 font-medium bg-[#F7F4EE] min-h-screen">Location not found.</div>;
 
   const { start, end } = getStartAndEndDates();
-  const calculatedTotal = parseInt(durationHours) * location.pricing.hourlyRate; // Exact rate
+  const calculatedTotal = parseInt(durationHours) * location.pricing.hourlyRate;
 
   return (
     <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto font-body">
@@ -169,7 +177,7 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 1: Time Window in 24-Hour Format */}
+      {/* STEP 1: Schedule & Vehicle Selection */}
       {step === 1 && (
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
           <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 1: Enter Schedule & Vehicle Details</h2>
@@ -249,7 +257,7 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 2: Expanded Bay Grid */}
+      {/* STEP 2: Floor & Bay Selection */}
       {step === 2 && (
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E3DED2]">
@@ -342,7 +350,7 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 3: Exact Pricing Summary */}
+      {/* STEP 3: Reservation Summary & Confirmation */}
       {step === 3 && (
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
           <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 3: Review Reservation Summary</h2>
