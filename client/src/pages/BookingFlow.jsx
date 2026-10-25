@@ -21,7 +21,7 @@ export default function BookingFlow() {
   const [bays, setBays] = useState([]);
 
   const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState(searchParams.get('startTime') || '14:00'); // 24-hr default
+  const [startTime, setStartTime] = useState(searchParams.get('startTime') || '14:00');
   const [durationHours, setDurationHours] = useState(searchParams.get('durationHours') || '2');
   const [vehicleType, setVehicleType] = useState(searchParams.get('vehicleType') || 'car');
   const [vehicleReg, setVehicleReg] = useState(user?.vehicles?.[0]?.regNumber || 'KL 13 AS 1234');
@@ -112,7 +112,6 @@ export default function BookingFlow() {
     } catch (err) {
       if (err.response?.status === 401 || err.response?.data?.message?.includes('token')) {
         setError('Your session has expired. Please log in again to complete your reservation.');
-        // Clear both possible storage keys to prevent invalid token persistence
         localStorage.removeItem('parkora_token');
         localStorage.removeItem('token');
         setTimeout(() => {
@@ -129,43 +128,43 @@ export default function BookingFlow() {
     }
   };
 
-  if (loading) return <div className="py-28 text-center text-[#5C6B64] font-medium bg-[#F7F4EE] min-h-screen">Loading facility details...</div>;
-  if (!location) return <div className="py-28 text-center text-red-600 font-medium bg-[#F7F4EE] min-h-screen">Location not found.</div>;
+  if (loading) return <div className="py-28 text-center text-slate-500 font-medium bg-white min-h-screen">Loading facility details...</div>;
+  if (!location) return <div className="py-28 text-center text-red-600 font-medium bg-white min-h-screen">Location not found.</div>;
 
   const { start, end } = getStartAndEndDates();
   const calculatedTotal = parseInt(durationHours) * location.pricing.hourlyRate;
 
   return (
-    <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto font-body">
+    <div className="min-h-screen bg-white text-slate-900 pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto font-body">
       
       {/* Navigation & Header */}
       <div className="mb-6">
         <button
           onClick={() => navigate('/locations')}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B3D2E] hover:text-[#145C43] mb-3 transition-colors bg-white border border-[#E3DED2] px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B3D2E] hover:text-[#145C43] mb-3 transition-colors bg-white border border-slate-200 px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Facilities
         </button>
-        <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#14201B] tracking-tight">{location.name}</h1>
-        <p className="text-xs text-[#5C6B64] flex items-center gap-1 mt-1">
+        <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">{location.name}</h1>
+        <p className="text-xs text-slate-500 flex items-center gap-1 mt-1 font-medium">
           <MapPin className="w-3.5 h-3.5 text-[#0B3D2E]" /> {location.address.street}, {location.address.area}
         </p>
       </div>
 
       {/* Step Indicator Header */}
-      <div className="bg-white rounded-2xl border border-[#E3DED2] p-4 mb-6 flex items-center justify-between shadow-sm">
-        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? 'text-[#0B3D2E]' : 'text-[#5C6B64]'}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 1 ? 'bg-[#0B3D2E] text-white' : 'bg-[#E3DED2] text-[#5C6B64]'}`}>1</span>
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6 flex items-center justify-between shadow-sm">
+        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? 'text-[#0B3D2E]' : 'text-slate-400'}`}>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 1 ? 'bg-[#0B3D2E] text-white' : 'bg-slate-100 text-slate-500'}`}>1</span>
           1. Time & Vehicle
         </div>
-        <div className={`h-0.5 flex-1 mx-3 ${step >= 2 ? 'bg-[#0B3D2E]' : 'bg-[#E3DED2]'}`} />
-        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 2 ? 'text-[#0B3D2E]' : 'text-[#5C6B64]'}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 2 ? 'bg-[#0B3D2E] text-white' : 'bg-[#E3DED2] text-[#5C6B64]'}`}>2</span>
+        <div className={`h-0.5 flex-1 mx-3 ${step >= 2 ? 'bg-[#0B3D2E]' : 'bg-slate-200'}`} />
+        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 2 ? 'text-[#0B3D2E]' : 'text-slate-400'}`}>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 2 ? 'bg-[#0B3D2E] text-white' : 'bg-slate-100 text-slate-500'}`}>2</span>
           2. Floor & Bay Grid
         </div>
-        <div className={`h-0.5 flex-1 mx-3 ${step >= 3 ? 'bg-[#0B3D2E]' : 'bg-[#E3DED2]'}`} />
-        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 3 ? 'text-[#0B3D2E]' : 'text-[#5C6B64]'}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 3 ? 'bg-[#0B3D2E] text-white' : 'bg-[#E3DED2] text-[#5C6B64]'}`}>3</span>
+        <div className={`h-0.5 flex-1 mx-3 ${step >= 3 ? 'bg-[#0B3D2E]' : 'bg-slate-200'}`} />
+        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 3 ? 'text-[#0B3D2E]' : 'text-slate-400'}`}>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 3 ? 'bg-[#0B3D2E] text-white' : 'bg-slate-100 text-slate-500'}`}>3</span>
           3. Review & QR Ticket
         </div>
       </div>
@@ -177,41 +176,41 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 1: Schedule & Vehicle Selection */}
+      {/* STEP 1: Form Details */}
       {step === 1 && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
-          <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 1: Enter Schedule & Vehicle Details</h2>
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <h2 className="text-lg font-heading font-bold text-slate-900">Step 1: Enter Schedule & Vehicle Details</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Arrival Date</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Arrival Date</label>
               <input
                 type="date"
                 value={date}
                 min={new Date().toISOString().split('T')[0]}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Arrival Time (24-Hour Format)
               </label>
               <input
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Duration</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Duration</label>
               <select
                 value={durationHours}
                 onChange={(e) => setDurationHours(e.target.value)}
-                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               >
                 <option value="1">1 Hour</option>
                 <option value="2">2 Hours</option>
@@ -221,11 +220,11 @@ export default function BookingFlow() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Vehicle Type</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vehicle Type</label>
               <select
                 value={vehicleType}
                 onChange={(e) => setVehicleType(e.target.value)}
-                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               >
                 <option value="car">Car / SUV</option>
                 <option value="bike">Two Wheeler</option>
@@ -234,13 +233,13 @@ export default function BookingFlow() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Vehicle Registration Number</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vehicle Registration Number</label>
               <input
                 type="text"
                 placeholder="e.g. KL 13 AS 1234"
                 value={vehicleReg}
                 onChange={(e) => setVehicleReg(e.target.value.toUpperCase())}
-                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-bold uppercase tracking-wider text-[#14201B] outline-none focus:border-[#0B3D2E]"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold uppercase tracking-wider text-slate-900 outline-none focus:border-[#0B3D2E]"
                 required
               />
             </div>
@@ -257,18 +256,18 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 2: Floor & Bay Selection */}
+      {/* STEP 2: Bay Grid */}
       {step === 2 && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E3DED2]">
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
             <div>
-              <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 2: Choose Your Parking Bay</h2>
-              <p className="text-xs text-[#5C6B64] mt-0.5">
+              <h2 className="text-lg font-heading font-bold text-slate-900">Step 2: Choose Your Parking Bay</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
                 24-Hr Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
               </p>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-[#F7F4EE] p-1.5 rounded-xl border border-[#E3DED2]">
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
               {floors.map((fl) => (
                 <button
                   key={fl._id}
@@ -276,7 +275,7 @@ export default function BookingFlow() {
                     setSelectedFloor(fl);
                     setSelectedBay(null);
                   }}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${selectedFloor?._id === fl._id ? 'bg-[#0B3D2E] text-white shadow-sm' : 'text-[#5C6B64] hover:text-[#14201B]'}`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${selectedFloor?._id === fl._id ? 'bg-[#0B3D2E] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   {fl.name}
                 </button>
@@ -284,7 +283,7 @@ export default function BookingFlow() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6 text-xs font-semibold text-[#5C6B64] bg-[#F7F4EE] p-3.5 rounded-xl border border-[#E3DED2]">
+          <div className="flex items-center gap-6 text-xs font-semibold text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
             <div className="flex items-center gap-2">
               <span className="w-3.5 h-3.5 rounded bg-[#145C43]" /> Available
             </div>
@@ -292,12 +291,12 @@ export default function BookingFlow() {
               <span className="w-3.5 h-3.5 rounded bg-[#F2B705] ring-2 ring-[#0B3D2E]" /> Selected
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3.5 h-3.5 rounded bg-[#E3DED2] opacity-80" /> Reserved / Occupied
+              <span className="w-3.5 h-3.5 rounded bg-slate-200 opacity-80" /> Reserved / Occupied
             </div>
           </div>
 
           {loadingBays ? (
-            <div className="py-12 text-center text-xs font-medium text-[#5C6B64]">Checking bay availability...</div>
+            <div className="py-12 text-center text-xs font-medium text-slate-500">Checking bay availability...</div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
               {bays.map((b) => {
@@ -311,10 +310,10 @@ export default function BookingFlow() {
                     onClick={() => setSelectedBay(b)}
                     className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between h-20 relative cursor-pointer ${
                       isSelected
-                        ? 'bg-[#F2B705] text-[#14201B] border-[#0B3D2E] ring-2 ring-[#0B3D2E] shadow-sm scale-105 font-bold'
+                        ? 'bg-[#F2B705] text-slate-900 border-[#0B3D2E] ring-2 ring-[#0B3D2E] shadow-sm scale-105 font-bold'
                         : isAvailable
                         ? 'bg-[#145C43] hover:bg-[#0B3D2E] border-transparent text-white'
-                        : 'bg-[#E3DED2] border-[#E3DED2] text-[#5C6B64] opacity-60 cursor-not-allowed'
+                        : 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed'
                     }`}
                   >
                     <div className="flex items-center justify-between w-full">
@@ -331,10 +330,10 @@ export default function BookingFlow() {
             </div>
           )}
 
-          <div className="flex gap-3 pt-4 border-t border-[#E3DED2]">
+          <div className="flex gap-3 pt-4 border-t border-slate-200">
             <button
               onClick={() => setStep(1)}
-              className="py-3 px-5 bg-[#F7F4EE] hover:bg-[#E3DED2]/60 text-[#14201B] font-bold rounded-xl border border-[#E3DED2] text-sm cursor-pointer transition-colors"
+              className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl border border-slate-200 text-sm cursor-pointer transition-colors"
             >
               Back
             </button>
@@ -350,41 +349,41 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 3: Reservation Summary & Confirmation */}
+      {/* STEP 3: Summary */}
       {step === 3 && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
-          <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 3: Review Reservation Summary</h2>
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <h2 className="text-lg font-heading font-bold text-slate-900">Step 3: Review Reservation Summary</h2>
 
-          <div className="bg-[#F7F4EE] rounded-2xl p-5 border border-[#E3DED2] space-y-3.5 text-xs">
-            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
-              <span className="text-[#5C6B64]">Facility:</span>
-              <span className="font-bold text-[#14201B]">{location.name}</span>
+          <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-3.5 text-xs">
+            <div className="flex justify-between border-b border-slate-200 pb-2.5">
+              <span className="text-slate-500 font-medium">Facility:</span>
+              <span className="font-bold text-slate-900">{location.name}</span>
             </div>
-            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
-              <span className="text-[#5C6B64]">Floor & Bay Slot:</span>
+            <div className="flex justify-between border-b border-slate-200 pb-2.5">
+              <span className="text-slate-500 font-medium">Floor & Bay Slot:</span>
               <span className="font-bold text-[#0B3D2E]">{selectedFloor?.name} — Bay {selectedBay?.bayNumber}</span>
             </div>
-            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
-              <span className="text-[#5C6B64]">Vehicle Registration:</span>
-              <span className="font-bold uppercase tracking-wider text-[#14201B]">{vehicleReg}</span>
+            <div className="flex justify-between border-b border-slate-200 pb-2.5">
+              <span className="text-slate-500 font-medium">Vehicle Registration:</span>
+              <span className="font-bold uppercase tracking-wider text-slate-900">{vehicleReg}</span>
             </div>
-            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
-              <span className="text-[#5C6B64]">Interval Window (24-Hr):</span>
-              <span className="font-semibold text-[#14201B]">
+            <div className="flex justify-between border-b border-slate-200 pb-2.5">
+              <span className="text-slate-500 font-medium">Interval Window (24-Hr):</span>
+              <span className="font-semibold text-slate-900">
                 {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
               </span>
             </div>
-            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
-              <span className="text-[#5C6B64]">Hourly Rate x Duration:</span>
-              <span className="font-semibold text-[#14201B]">₹{location.pricing.hourlyRate} x {durationHours} hrs</span>
+            <div className="flex justify-between border-b border-slate-200 pb-2.5">
+              <span className="text-slate-500 font-medium">Hourly Rate x Duration:</span>
+              <span className="font-semibold text-slate-900">₹{location.pricing.hourlyRate} x {durationHours} hrs</span>
             </div>
             <div className="flex justify-between pt-1 text-sm font-extrabold">
-              <span className="text-[#14201B]">Total Payable at Facility:</span>
+              <span className="text-slate-900">Total Payable at Facility:</span>
               <span className="text-[#0B3D2E] font-heading text-base">₹{calculatedTotal}</span>
             </div>
           </div>
 
-          <div className="p-3.5 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-[#5C6B64] text-xs flex items-center gap-2 font-medium">
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-xs flex items-center gap-2 font-medium">
             <Info className="w-4 h-4 shrink-0 text-[#0B3D2E]" />
             Pay-at-Facility Mode: Payment is collected upon vehicle exit by facility staff.
           </div>
@@ -392,7 +391,7 @@ export default function BookingFlow() {
           <div className="flex gap-3">
             <button
               onClick={() => setStep(2)}
-              className="py-3.5 px-6 bg-[#F7F4EE] hover:bg-[#E3DED2]/60 text-[#14201B] font-bold rounded-xl border border-[#E3DED2] text-sm cursor-pointer transition-colors"
+              className="py-3.5 px-6 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl border border-slate-200 text-sm cursor-pointer transition-colors"
             >
               Back
             </button>
@@ -409,7 +408,7 @@ export default function BookingFlow() {
       )}
 
       {/* Security Footer Note */}
-      <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#5C6B64]">
+      <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-500 font-medium">
         <ShieldCheck className="w-4 h-4 text-[#0B3D2E]" />
         <span>Non-overlapping atomic reservation engine • Verified for Kannur Smart City</span>
       </div>
