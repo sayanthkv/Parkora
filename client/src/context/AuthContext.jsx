@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import API from '../api/axios';
 
 const AuthContext = createContext(null);
 
@@ -8,36 +9,77 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load initial user state from localStorage or verify token
     const storedUser = localStorage.getItem('parkora_user');
-    if (storedUser && token) {
-      setUser(JSON.parse(storedUser));
+    const storedToken = localStorage.getItem('parkora_token');
+
+    if (storedUser && storedToken) {
+      try {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
+      } catch (e) {
+        logout();
+      }
+    } else {
+      logout();
     }
     setLoading(false);
-  }, [token]);
+  }, []);
 
-  const login = (userData, userToken) => {
-    localStorage.setItem('parkora_token', userToken);
+  // Login handler accepting email & password from Login component
+  const login = async (email, password) => {
+    const res = await API.post('/auth/login', { email, password });
+    
+    // Support flexible backend response structures
+    const responseData = res.data.data || res.data;
+    const jwtToken = responseData.token || res.data.token;
+    const userData = responseData.user || responseData;
+
+    if (!jwtToken) {
+      throw new Error('No authentication token received from server.');
+    }
+
+    localStorage.setItem('parkora_token', jwtToken);
     localStorage.setItem('parkora_user', JSON.stringify(userData));
-    setToken(userToken);
+    
+    setToken(jwtToken);
     setUser(userData);
+
+    return responseData;
+  };
+
+  // Register handler accepting registration object
+  const register = async (registrationData) => {
+    const res = await API.post('/auth/register', registrationData);
+
+    const responseData = res.data.data || res.data;
+    const jwtToken = responseData.token || res.data.token;
+    const userData = responseData.user || responseData;
+
+    if (jwtToken) {
+      localStorage.setItem('parkora_token', jwtToken);
+      localStorage.setItem('parkora_user', JSON.stringify(userData));
+      setToken(jwtToken);
+      setUser(userData);
+    }
+
+    return responseData;
   };
 
   const logout = () => {
     localStorage.removeItem('parkora_token');
     localStorage.removeItem('parkora_user');
+    localStorage.removeItem('token'); // Clear backup key if present
     setToken(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Custom Hook with explicit safety check
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

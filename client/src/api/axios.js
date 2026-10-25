@@ -7,7 +7,6 @@ const API = axios.create({
   },
 });
 
-// Interceptor: Check both token keys so requests never miss the Authorization header
 API.interceptors.request.use((config) => {
   const token = localStorage.getItem('parkora_token') || localStorage.getItem('token');
   if (token) {
