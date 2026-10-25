@@ -13,15 +13,12 @@ import BookingFlow from './pages/BookingFlow';
 import Ticket from './pages/Ticket';
 import StaffPortal from './pages/StaffPortal';
 import AdminDashboard from './pages/AdminDashboard';
+import MyBookings from './pages/MyBookings';
 
 function App() {
   return (
     <Router>
-      {/* 
-        Using bg-slate-50 (or bg-neutral-100) on the top wrapper spans 100% width 
-        and matches the light content background, removing side black bars.
-      */}
-      <div className="flex flex-col min-h-screen bg-slate-50 text-neutral-900 w-full">
+      <div className="flex flex-col min-h-screen bg-[#F7F4EE] text-[#14201B] w-full font-body">
         <Navbar />
         
         {/* Main Content Area */}
@@ -35,8 +32,9 @@ function App() {
 
             {/* Authenticated Customer Routes */}
             <Route element={<ProtectedRoute allowedRoles={['customer', 'staff', 'admin']} />}>
-              <Route path="/book/:locationId" element={<BookingFlow />} />
+              <Route path="/book/:slug" element={<BookingFlow />} />
               <Route path="/ticket/:bookingRef" element={<Ticket />} />
+              <Route path="/my-bookings" element={<MyBookings />} />
             </Route>
 
             {/* Staff Only Routes */}

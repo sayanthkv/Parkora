@@ -40,12 +40,12 @@ export default function Locations() {
     return matchesQuery && matchesVehicle;
   });
 
-  const handleSelectLocation = (slug) => {
-    if (!slug) return;
-    const query = searchParams.toString();
-    // Directly navigates to the booking flow for the selected location
-    navigate(`/book/${slug}${query ? `?${query}` : ''}`);
-  };
+ const handleSelectLocation = (slug, id) => {
+  const targetId = slug || id;
+  if (!targetId) return;
+  const query = searchParams.toString();
+  navigate(`/book/${targetId}${query ? `?${query}` : ''}`);
+};
 
   return (
     <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] pt-24 pb-16 px-4 sm:px-6 lg:px-8">
@@ -153,13 +153,13 @@ export default function Locations() {
 
                 {/* Action Button */}
                 <button
-                  type="button"
-                  onClick={() => handleSelectLocation(loc.slug)}
-                  className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
-                >
-                  Select Floor & Book Bay
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+  type="button"
+  onClick={() => handleSelectLocation(loc.slug, loc._id)}
+  className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+>
+  Select Floor & Book Bay
+  <ArrowRight className="w-4 h-4" />
+</button>
               </div>
             ))}
           </div>
