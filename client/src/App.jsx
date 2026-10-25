@@ -18,11 +18,11 @@ import MyBookings from './pages/MyBookings';
 function App() {
   return (
     <Router>
-      <div className="flex flex-col min-h-screen bg-[#F7F4EE] text-[#14201B] w-full font-body">
+      <div className="flex flex-col min-h-screen bg-white text-[#14201B] w-full font-body">
         <Navbar />
         
         {/* Main Content Area */}
-        <main className="flex-grow w-full">
+        <main className="flex-grow w-full bg-white">
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Home />} />
