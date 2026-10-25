@@ -3,8 +3,8 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import API from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
-  MapPin, Clock, ArrowRight, ArrowLeft, Zap, Info,
-  CheckCircle2, AlertCircle
+  MapPin, ArrowRight, ArrowLeft, Zap, Info,
+  CheckCircle2, AlertCircle, ShieldCheck
 } from 'lucide-react';
 
 export default function BookingFlow() {
@@ -121,87 +121,89 @@ export default function BookingFlow() {
     }
   };
 
-  if (loading) return <div className="py-20 text-center text-gray-500">Loading facility details...</div>;
-  if (!location) return <div className="py-20 text-center text-red-600">Location not found.</div>;
+  if (loading) return <div className="py-28 text-center text-[#5C6B64] font-medium bg-[#F7F4EE] min-h-screen">Loading facility details...</div>;
+  if (!location) return <div className="py-28 text-center text-red-600 font-medium bg-[#F7F4EE] min-h-screen">Location not found.</div>;
 
   const { start, end } = getStartAndEndDates();
   const calculatedTotal = parseInt(durationHours) * location.pricing.hourlyRate; // Exact rate
 
   return (
-    <div className="min-h-screen bg-[#F7F8F6] py-8 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+    <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto font-body">
       
+      {/* Navigation & Header */}
       <div className="mb-6">
         <button
           onClick={() => navigate('/locations')}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-[#176B4D] mb-2 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B3D2E] hover:text-[#145C43] mb-3 transition-colors bg-white border border-[#E3DED2] px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Locations
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Facilities
         </button>
-        <h1 className="text-2xl font-bold text-[#202722]">{location.name}</h1>
-        <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-          <MapPin className="w-3.5 h-3.5" /> {location.address.street}, {location.address.area}
+        <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#14201B] tracking-tight">{location.name}</h1>
+        <p className="text-xs text-[#5C6B64] flex items-center gap-1 mt-1">
+          <MapPin className="w-3.5 h-3.5 text-[#0B3D2E]" /> {location.address.street}, {location.address.area}
         </p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200/80 p-4 mb-6 flex items-center justify-between">
-        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? 'text-[#176B4D]' : 'text-gray-400'}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center border text-xs ${step >= 1 ? 'bg-[#176B4D] text-white border-[#176B4D]' : 'border-gray-300'}`}>1</span>
+      {/* Step Indicator Header */}
+      <div className="bg-white rounded-2xl border border-[#E3DED2] p-4 mb-6 flex items-center justify-between shadow-sm">
+        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? 'text-[#0B3D2E]' : 'text-[#5C6B64]'}`}>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 1 ? 'bg-[#0B3D2E] text-white' : 'bg-[#E3DED2] text-[#5C6B64]'}`}>1</span>
           1. Time & Vehicle
         </div>
-        <div className="h-0.5 flex-1 mx-4 bg-gray-200" />
-        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 2 ? 'text-[#176B4D]' : 'text-gray-400'}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center border text-xs ${step >= 2 ? 'bg-[#176B4D] text-white border-[#176B4D]' : 'border-gray-300'}`}>2</span>
+        <div className={`h-0.5 flex-1 mx-3 ${step >= 2 ? 'bg-[#0B3D2E]' : 'bg-[#E3DED2]'}`} />
+        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 2 ? 'text-[#0B3D2E]' : 'text-[#5C6B64]'}`}>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 2 ? 'bg-[#0B3D2E] text-white' : 'bg-[#E3DED2] text-[#5C6B64]'}`}>2</span>
           2. Floor & Bay Grid
         </div>
-        <div className="h-0.5 flex-1 mx-4 bg-gray-200" />
-        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 3 ? 'text-[#176B4D]' : 'text-gray-400'}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center border text-xs ${step >= 3 ? 'bg-[#176B4D] text-white border-[#176B4D]' : 'border-gray-300'}`}>3</span>
+        <div className={`h-0.5 flex-1 mx-3 ${step >= 3 ? 'bg-[#0B3D2E]' : 'bg-[#E3DED2]'}`} />
+        <div className={`flex items-center gap-2 text-xs font-bold ${step >= 3 ? 'text-[#0B3D2E]' : 'text-[#5C6B64]'}`}>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-heading text-xs transition-colors ${step >= 3 ? 'bg-[#0B3D2E] text-white' : 'bg-[#E3DED2] text-[#5C6B64]'}`}>3</span>
           3. Review & QR Ticket
         </div>
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 flex items-center gap-2 font-medium">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
           {error}
         </div>
       )}
 
       {/* STEP 1: Time Window in 24-Hour Format */}
       {step === 1 && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 space-y-6">
-          <h2 className="text-base font-bold text-[#202722]">Step 1: Enter Schedule & Vehicle Details</h2>
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
+          <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 1: Enter Schedule & Vehicle Details</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Arrival Date</label>
+              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Arrival Date</label>
               <input
                 type="date"
                 value={date}
                 min={new Date().toISOString().split('T')[0]}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-[#202722] outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">
                 Arrival Time (24-Hour Format)
               </label>
               <input
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-[#202722] outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Duration</label>
+              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Duration</label>
               <select
                 value={durationHours}
                 onChange={(e) => setDurationHours(e.target.value)}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-[#202722] outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               >
                 <option value="1">1 Hour</option>
                 <option value="2">2 Hours</option>
@@ -211,11 +213,11 @@ export default function BookingFlow() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Vehicle Type</label>
+              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Vehicle Type</label>
               <select
                 value={vehicleType}
                 onChange={(e) => setVehicleType(e.target.value)}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-[#202722] outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               >
                 <option value="car">Car / SUV</option>
                 <option value="bike">Two Wheeler</option>
@@ -224,13 +226,13 @@ export default function BookingFlow() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Vehicle Registration Number</label>
+              <label className="block text-xs font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">Vehicle Registration Number</label>
               <input
                 type="text"
                 placeholder="e.g. KL 13 AS 1234"
                 value={vehicleReg}
                 onChange={(e) => setVehicleReg(e.target.value.toUpperCase())}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm uppercase text-[#202722] font-mono tracking-wider outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-bold uppercase tracking-wider text-[#14201B] outline-none focus:border-[#0B3D2E]"
                 required
               />
             </div>
@@ -239,7 +241,7 @@ export default function BookingFlow() {
           <button
             onClick={() => setStep(2)}
             disabled={!vehicleReg.trim()}
-            className="w-full py-3 bg-[#176B4D] hover:bg-[#12533c] text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
           >
             Select Floor & Bay
             <ArrowRight className="w-4 h-4" />
@@ -247,18 +249,18 @@ export default function BookingFlow() {
         </div>
       )}
 
-      {/* STEP 2: Expanded Bay Grid (20-30 Slots) */}
+      {/* STEP 2: Expanded Bay Grid */}
       {step === 2 && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E3DED2]">
             <div>
-              <h2 className="text-base font-bold text-[#202722]">Step 2: Choose Your Parking Bay</h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                24-Hr Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} - {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
+              <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 2: Choose Your Parking Bay</h2>
+              <p className="text-xs text-[#5C6B64] mt-0.5">
+                24-Hr Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
               </p>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-lg">
+            <div className="flex items-center gap-1.5 bg-[#F7F4EE] p-1.5 rounded-xl border border-[#E3DED2]">
               {floors.map((fl) => (
                 <button
                   key={fl._id}
@@ -266,7 +268,7 @@ export default function BookingFlow() {
                     setSelectedFloor(fl);
                     setSelectedBay(null);
                   }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${selectedFloor?._id === fl._id ? 'bg-[#176B4D] text-white shadow-sm' : 'text-gray-600 hover:text-black'}`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${selectedFloor?._id === fl._id ? 'bg-[#0B3D2E] text-white shadow-sm' : 'text-[#5C6B64] hover:text-[#14201B]'}`}
                 >
                   {fl.name}
                 </button>
@@ -274,20 +276,20 @@ export default function BookingFlow() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6 text-xs text-gray-600 bg-[#F7F8F6] p-3 rounded-lg border border-gray-200/60">
+          <div className="flex items-center gap-6 text-xs font-semibold text-[#5C6B64] bg-[#F7F4EE] p-3.5 rounded-xl border border-[#E3DED2]">
             <div className="flex items-center gap-2">
-              <span className="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-600" /> Available
+              <span className="w-3.5 h-3.5 rounded bg-[#145C43]" /> Available
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3.5 h-3.5 rounded bg-[#176B4D] ring-2 ring-[#176B4D]" /> Selected
+              <span className="w-3.5 h-3.5 rounded bg-[#F2B705] ring-2 ring-[#0B3D2E]" /> Selected
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3.5 h-3.5 rounded bg-red-400 opacity-60" /> Reserved / Occupied
+              <span className="w-3.5 h-3.5 rounded bg-[#E3DED2] opacity-80" /> Reserved / Occupied
             </div>
           </div>
 
           {loadingBays ? (
-            <div className="py-12 text-center text-xs text-gray-500">Checking bay availability...</div>
+            <div className="py-12 text-center text-xs font-medium text-[#5C6B64]">Checking bay availability...</div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
               {bays.map((b) => {
@@ -301,18 +303,18 @@ export default function BookingFlow() {
                     onClick={() => setSelectedBay(b)}
                     className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between h-20 relative cursor-pointer ${
                       isSelected
-                        ? 'bg-[#176B4D] text-white border-[#176B4D] ring-2 ring-[#176B4D]/30 shadow-md scale-105'
+                        ? 'bg-[#F2B705] text-[#14201B] border-[#0B3D2E] ring-2 ring-[#0B3D2E] shadow-sm scale-105 font-bold'
                         : isAvailable
-                        ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-900'
-                        : 'bg-red-50/60 border-red-200 text-red-400 opacity-60 cursor-not-allowed'
+                        ? 'bg-[#145C43] hover:bg-[#0B3D2E] border-transparent text-white'
+                        : 'bg-[#E3DED2] border-[#E3DED2] text-[#5C6B64] opacity-60 cursor-not-allowed'
                     }`}
                   >
                     <div className="flex items-center justify-between w-full">
-                      <span className="font-mono text-xs font-bold">{b.bayNumber}</span>
-                      {b.isEVCharging && <Zap className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-300' : 'text-amber-500'}`} />}
+                      <span className="font-heading text-xs font-bold">{b.bayNumber}</span>
+                      {b.isEVCharging && <Zap className={`w-3.5 h-3.5 ${isSelected ? 'text-[#0B3D2E]' : 'text-[#F2B705]'}`} />}
                     </div>
 
-                    <span className="text-[10px] uppercase tracking-wider font-semibold opacity-80">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold opacity-90">
                       {isSelected ? 'SELECTED' : isAvailable ? b.supportedVehicleType : 'RESERVED'}
                     </span>
                   </button>
@@ -321,17 +323,17 @@ export default function BookingFlow() {
             </div>
           )}
 
-          <div className="flex gap-3 pt-4 border-t border-gray-100">
+          <div className="flex gap-3 pt-4 border-t border-[#E3DED2]">
             <button
               onClick={() => setStep(1)}
-              className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-sm cursor-pointer"
+              className="py-3 px-5 bg-[#F7F4EE] hover:bg-[#E3DED2]/60 text-[#14201B] font-bold rounded-xl border border-[#E3DED2] text-sm cursor-pointer transition-colors"
             >
               Back
             </button>
             <button
               disabled={!selectedBay}
               onClick={() => setStep(3)}
-              className="flex-1 py-2.5 bg-[#176B4D] hover:bg-[#12533c] text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer"
+              className="flex-1 py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
             >
               Review Reservation
               <ArrowRight className="w-4 h-4" />
@@ -342,61 +344,67 @@ export default function BookingFlow() {
 
       {/* STEP 3: Exact Pricing Summary */}
       {step === 3 && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 space-y-6">
-          <h2 className="text-base font-bold text-[#202722]">Step 3: Review Reservation Summary</h2>
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
+          <h2 className="text-lg font-heading font-bold text-[#14201B]">Step 3: Review Reservation Summary</h2>
 
-          <div className="bg-[#F7F8F6] rounded-xl p-5 border border-gray-200 space-y-3 text-xs">
-            <div className="flex justify-between border-b border-gray-200/60 pb-2">
-              <span className="text-gray-500">Facility:</span>
-              <span className="font-bold text-[#202722]">{location.name}</span>
+          <div className="bg-[#F7F4EE] rounded-2xl p-5 border border-[#E3DED2] space-y-3.5 text-xs">
+            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
+              <span className="text-[#5C6B64]">Facility:</span>
+              <span className="font-bold text-[#14201B]">{location.name}</span>
             </div>
-            <div className="flex justify-between border-b border-gray-200/60 pb-2">
-              <span className="text-gray-500">Floor & Bay Slot:</span>
-              <span className="font-bold text-[#176B4D]">{selectedFloor?.name} — Bay {selectedBay?.bayNumber}</span>
+            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
+              <span className="text-[#5C6B64]">Floor & Bay Slot:</span>
+              <span className="font-bold text-[#0B3D2E]">{selectedFloor?.name} — Bay {selectedBay?.bayNumber}</span>
             </div>
-            <div className="flex justify-between border-b border-gray-200/60 pb-2">
-              <span className="text-gray-500">Vehicle Registration:</span>
-              <span className="font-mono font-bold text-[#202722]">{vehicleReg}</span>
+            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
+              <span className="text-[#5C6B64]">Vehicle Registration:</span>
+              <span className="font-bold uppercase tracking-wider text-[#14201B]">{vehicleReg}</span>
             </div>
-            <div className="flex justify-between border-b border-gray-200/60 pb-2">
-              <span className="text-gray-500">Interval Window (24-Hr):</span>
-              <span className="font-semibold text-[#202722]">
-                {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} - {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
+              <span className="text-[#5C6B64]">Interval Window (24-Hr):</span>
+              <span className="font-semibold text-[#14201B]">
+                {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
               </span>
             </div>
-            <div className="flex justify-between border-b border-gray-200/60 pb-2">
-              <span className="text-gray-500">Hourly Rate x Hours:</span>
-              <span className="font-semibold text-[#202722]">₹{location.pricing.hourlyRate} x {durationHours} hrs</span>
+            <div className="flex justify-between border-b border-[#E3DED2] pb-2.5">
+              <span className="text-[#5C6B64]">Hourly Rate x Duration:</span>
+              <span className="font-semibold text-[#14201B]">₹{location.pricing.hourlyRate} x {durationHours} hrs</span>
             </div>
-            <div className="flex justify-between pt-1 text-sm font-bold">
-              <span className="text-[#202722]">Total Payable at Facility:</span>
-              <span className="text-[#176B4D]">₹{calculatedTotal}</span>
+            <div className="flex justify-between pt-1 text-sm font-extrabold">
+              <span className="text-[#14201B]">Total Payable at Facility:</span>
+              <span className="text-[#0B3D2E] font-heading text-base">₹{calculatedTotal}</span>
             </div>
           </div>
 
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2">
-            <Info className="w-4 h-4 shrink-0" />
+          <div className="p-3.5 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-[#5C6B64] text-xs flex items-center gap-2 font-medium">
+            <Info className="w-4 h-4 shrink-0 text-[#0B3D2E]" />
             Pay-at-Facility Mode: Payment is collected upon vehicle exit by facility staff.
           </div>
 
           <div className="flex gap-3">
             <button
               onClick={() => setStep(2)}
-              className="py-3 px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-sm cursor-pointer"
+              className="py-3.5 px-6 bg-[#F7F4EE] hover:bg-[#E3DED2]/60 text-[#14201B] font-bold rounded-xl border border-[#E3DED2] text-sm cursor-pointer transition-colors"
             >
               Back
             </button>
             <button
               onClick={handleConfirmBooking}
               disabled={submitting}
-              className="flex-1 py-3 bg-[#176B4D] hover:bg-[#12533c] text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
+              className="flex-1 py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
             >
               {submitting ? 'Creating Ticket...' : 'Confirm & Generate QR Ticket'}
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4 text-[#F2B705]" />
             </button>
           </div>
         </div>
       )}
+
+      {/* Security Footer Note */}
+      <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#5C6B64]">
+        <ShieldCheck className="w-4 h-4 text-[#0B3D2E]" />
+        <span>Non-overlapping atomic reservation engine • Verified for Kannur Smart City</span>
+      </div>
 
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export default function Login() {
   const { login } = useAuth();
@@ -31,39 +31,52 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F8F6] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full bg-white p-8 rounded-2xl border border-gray-200/80 shadow-sm space-y-6">
+    <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] flex items-center justify-center pt-28 pb-16 px-4 sm:px-6 lg:px-8 font-body">
+      <div className="max-w-md w-full bg-white p-8 sm:p-10 rounded-2xl border border-[#E3DED2] shadow-sm space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-[#202722]">Sign In to Parkora</h2>
-          <p className="text-xs text-gray-500 mt-1">Manage your reservations and QR parking passes.</p>
+          <span className="text-xs font-bold uppercase tracking-widest text-[#0B3D2E] bg-[#E3DED2]/60 px-3.5 py-1.5 rounded-full inline-block mb-3">
+            Account Access
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#14201B] tracking-tight">
+            Sign In to Parkora
+          </h2>
+          <p className="text-xs text-[#5C6B64] mt-1.5 font-medium">
+            Manage your reservations and QR parking passes.
+          </p>
         </div>
 
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+          <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 font-semibold">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block font-semibold text-gray-700 mb-1">Email Address</label>
+            <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">
+              Email Address
+            </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#176B4D]"
+              placeholder="e.g. user@example.com"
+              className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               required
             />
           </div>
 
           <div>
-            <label className="block font-semibold text-gray-700 mb-1">Password</label>
+            <label className="block font-bold text-[#5C6B64] uppercase tracking-wider mb-1.5">
+              Password
+            </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#176B4D]"
+              placeholder="••••••••"
+              className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               required
             />
           </div>
@@ -71,19 +84,24 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-[#176B4D] hover:bg-[#12533c] text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+            className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-sm active:scale-95"
           >
             {loading ? 'Authenticating...' : 'Sign In'}
-            <LogIn className="w-4 h-4" />
+            <LogIn className="w-4 h-4 text-[#F2B705]" />
           </button>
         </form>
 
-        <p className="text-center text-xs text-gray-500">
+        <div className="pt-2 border-t border-[#E3DED2] text-center text-xs text-[#5C6B64] font-medium">
           Don't have an account?{' '}
-          <Link to="/register" className="text-[#176B4D] font-bold hover:underline">
+          <Link to="/register" className="text-[#0B3D2E] font-bold hover:underline">
             Register here
           </Link>
-        </p>
+        </div>
+
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#5C6B64] pt-1">
+          <ShieldCheck className="w-3.5 h-3.5 text-[#0B3D2E]" />
+          <span>Encrypted JWT Authentication</span>
+        </div>
       </div>
     </div>
   );

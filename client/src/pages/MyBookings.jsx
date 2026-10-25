@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import API from '../api/axios';
-import { Ticket, Calendar, Clock, MapPin, QrCode, AlertCircle } from 'lucide-react';
+import { MapPin, QrCode, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export default function MyBookings() {
   const [bookings, setBookings] = useState([]);
@@ -24,59 +24,81 @@ export default function MyBookings() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F7F8F6] py-8 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto space-y-6 font-body">
       <div>
-        <h1 className="text-2xl font-bold text-[#202722]">My Parking Reservations</h1>
-        <p className="text-xs text-gray-500 mt-0.5">View digital QR passes and booking records.</p>
+        <span className="text-xs font-bold uppercase tracking-widest text-[#0B3D2E] bg-[#E3DED2]/60 px-3.5 py-1.5 rounded-full inline-block mb-2">
+          Customer Portal
+        </span>
+        <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#14201B] tracking-tight">
+          My Parking Reservations
+        </h1>
+        <p className="text-xs text-[#5C6B64] mt-1 font-medium">
+          View digital QR passes and active booking records.
+        </p>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-xs text-gray-500">Loading reservations...</div>
+        <div className="py-20 text-center text-xs text-[#5C6B64] font-medium">Loading reservations...</div>
       ) : error ? (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{error}</div>
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 font-semibold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+          {error}
+        </div>
       ) : bookings.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-2xl border border-gray-200 text-gray-500 text-xs">
-          No parking reservations found.
+        <div className="p-12 text-center bg-white rounded-2xl border border-[#E3DED2] text-[#5C6B64] text-xs font-medium space-y-3">
+          <p>No parking reservations found.</p>
+          <Link
+            to="/locations"
+            className="inline-block bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-sm"
+          >
+            Find & Reserve a Bay
+          </Link>
         </div>
       ) : (
         <div className="space-y-4">
           {bookings.map((b) => (
             <div
               key={b._id}
-              className="bg-white rounded-2xl border border-gray-200/80 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[#176B4D] transition-colors"
+              className="bg-white rounded-2xl border border-[#E3DED2] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[#0B3D2E] transition-all shadow-sm"
             >
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-[#202722]">{b.bookingRef}</span>
-                  <span className="px-2 py-0.5 rounded bg-[#176B4D]/10 text-[#176B4D] text-[10px] font-bold uppercase">
+                  <span className="font-mono text-xs font-bold text-[#0B3D2E]">{b.bookingRef}</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#F7F4EE] border border-[#E3DED2] text-[#145C43] text-[10px] font-bold uppercase tracking-wider">
                     {b.status}
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-[#202722]">{b.location?.name}</h3>
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5" /> Bay: {b.bay?.bayNumber} — Reg: {b.vehicle?.regNumber}
+                <h3 className="text-base font-heading font-bold text-[#14201B]">{b.location?.name}</h3>
+                <p className="text-xs text-[#5C6B64] flex items-center gap-1 font-medium">
+                  <MapPin className="w-3.5 h-3.5 text-[#0B3D2E]" /> Bay: {b.bay?.bayNumber} — Reg: <span className="uppercase font-bold text-[#14201B]">{b.vehicle?.regNumber}</span>
                 </p>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <span className="text-xs font-bold text-[#176B4D] block">₹{b.pricingSnapshot?.totalAmount}</span>
-                  <span className="text-[10px] text-gray-400 block">
-                    {new Date(b.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div className="flex items-center justify-between sm:justify-end gap-5 pt-3 sm:pt-0 border-t sm:border-t-0 border-[#E3DED2]">
+                <div className="text-left sm:text-right">
+                  <span className="text-base font-heading font-extrabold text-[#0B3D2E] block">₹{b.pricingSnapshot?.totalAmount}</span>
+                  <span className="text-[11px] text-[#5C6B64] font-medium block">
+                    {new Date(b.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
                   </span>
                 </div>
 
                 <Link
                   to={`/ticket/${b.bookingRef}`}
-                  className="px-4 py-2 bg-[#176B4D] hover:bg-[#12533c] text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white text-xs font-bold uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
                 >
-                  <QrCode className="w-3.5 h-3.5" /> View Ticket
+                  <QrCode className="w-3.5 h-3.5 text-[#F2B705]" /> View Ticket
                 </Link>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Security Footer Note */}
+      <div className="pt-4 flex items-center justify-center gap-1.5 text-xs text-[#5C6B64]">
+        <ShieldCheck className="w-4 h-4 text-[#0B3D2E]" />
+        <span>Validated Digital QR Passes • Present to Gate Operator</span>
+      </div>
     </div>
   );
 }

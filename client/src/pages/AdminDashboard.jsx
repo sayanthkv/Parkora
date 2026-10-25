@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import API from '../api/axios';
 import {
   ShieldCheck, MapPin, Users, Ticket, IndianRupee,
-  PlusCircle, RefreshCw, AlertCircle, CheckCircle2, Search
+  PlusCircle, RefreshCw, AlertCircle, CheckCircle2, Search, Building
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -127,64 +127,64 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F7F8F6] py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#F7F4EE] text-[#14201B] pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8 font-body">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm">
         <div>
-          <div className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
             <ShieldCheck className="w-3.5 h-3.5" /> Admin Console
           </div>
-          <h1 className="text-2xl font-bold text-[#202722]">Kannur System Control</h1>
-          <p className="text-xs text-gray-500 mt-1">Configure locations, manage staff accounts, and monitor reservation metrics.</p>
+          <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#14201B] tracking-tight">Kannur System Control</h1>
+          <p className="text-xs text-[#5C6B64] mt-1 font-medium">Configure locations, manage staff accounts, and monitor reservation metrics.</p>
         </div>
 
         <button
           onClick={fetchAdminData}
-          className="inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-lg border border-gray-200 text-xs font-semibold transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 bg-[#F7F4EE] hover:bg-[#E3DED2]/60 text-[#14201B] px-4 py-2.5 rounded-xl border border-[#E3DED2] text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 text-[#0B3D2E] ${loading ? 'animate-spin' : ''}`} />
           Refresh Console
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 gap-6 text-sm font-semibold">
+      <div className="flex border-b border-[#E3DED2] gap-6 text-xs sm:text-sm font-bold uppercase tracking-wider">
         <button
           onClick={() => setActiveTab('metrics')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'metrics' ? 'border-b-2 border-[#176B4D] text-[#176B4D]' : 'text-gray-500 hover:text-black'}`}
+          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'metrics' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-[#5C6B64] hover:text-[#14201B]'}`}
         >
           System Overview
         </button>
         <button
           onClick={() => setActiveTab('locations')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'locations' ? 'border-b-2 border-[#176B4D] text-[#176B4D]' : 'text-gray-500 hover:text-black'}`}
+          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'locations' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-[#5C6B64] hover:text-[#14201B]'}`}
         >
           Manage Facilities
         </button>
         <button
           onClick={() => setActiveTab('staff')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'staff' ? 'border-b-2 border-[#176B4D] text-[#176B4D]' : 'text-gray-500 hover:text-black'}`}
+          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'staff' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-[#5C6B64] hover:text-[#14201B]'}`}
         >
           Staff Accounts
         </button>
         <button
           onClick={() => setActiveTab('bookings')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'bookings' ? 'border-b-2 border-[#176B4D] text-[#176B4D]' : 'text-gray-500 hover:text-black'}`}
+          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'bookings' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-[#5C6B64] hover:text-[#14201B]'}`}
         >
           Master Bookings
         </button>
       </div>
 
       {message && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-semibold flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           {message}
         </div>
       )}
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 font-semibold flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
           {error}
         </div>
@@ -193,21 +193,21 @@ export default function AdminDashboard() {
       {/* TAB 1: Metrics Overview */}
       {activeTab === 'metrics' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider block">Configured Facilities</span>
-            <span className="text-3xl font-extrabold text-[#202722]">{metrics?.totalLocations ?? 0}</span>
+          <div className="bg-white p-6 rounded-2xl border border-[#E3DED2] shadow-sm space-y-2">
+            <span className="text-[#5C6B64] text-[10px] uppercase font-bold tracking-widest block">Configured Facilities</span>
+            <span className="text-3xl font-heading font-extrabold text-[#14201B]">{metrics?.totalLocations ?? 0}</span>
           </div>
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider block">Total Parking Bays</span>
-            <span className="text-3xl font-extrabold text-[#202722]">{metrics?.totalBays ?? 0}</span>
+          <div className="bg-white p-6 rounded-2xl border border-[#E3DED2] shadow-sm space-y-2">
+            <span className="text-[#5C6B64] text-[10px] uppercase font-bold tracking-widest block">Total Parking Bays</span>
+            <span className="text-3xl font-heading font-extrabold text-[#14201B]">{metrics?.totalBays ?? 0}</span>
           </div>
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider block">Active Parked Vehicles</span>
-            <span className="text-3xl font-extrabold text-[#176B4D]">{metrics?.activeBookings ?? 0}</span>
+          <div className="bg-white p-6 rounded-2xl border border-[#E3DED2] shadow-sm space-y-2">
+            <span className="text-[#5C6B64] text-[10px] uppercase font-bold tracking-widest block">Active Parked Vehicles</span>
+            <span className="text-3xl font-heading font-extrabold text-[#0B3D2E]">{metrics?.activeBookings ?? 0}</span>
           </div>
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider block">Total Facility Revenue</span>
-            <span className="text-3xl font-extrabold text-[#176B4D]">₹{metrics?.totalRevenue ?? 0}</span>
+          <div className="bg-white p-6 rounded-2xl border border-[#E3DED2] shadow-sm space-y-2">
+            <span className="text-[#5C6B64] text-[10px] uppercase font-bold tracking-widest block">Total Facility Revenue</span>
+            <span className="text-3xl font-heading font-extrabold text-[#0B3D2E]">₹{metrics?.totalRevenue ?? 0}</span>
           </div>
         </div>
       )}
@@ -215,62 +215,62 @@ export default function AdminDashboard() {
       {/* TAB 2: Facility Management */}
       {activeTab === 'locations' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-            <h2 className="text-base font-bold text-[#202722]">Add New Facility</h2>
-            <form onSubmit={handleCreateLocation} className="space-y-3 text-xs">
+          <div className="lg:col-span-5 bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-4">
+            <h2 className="text-base font-heading font-bold text-[#14201B]">Add New Facility</h2>
+            <form onSubmit={handleCreateLocation} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold mb-1">Facility Name</label>
+                <label className="block font-bold uppercase text-[#5C6B64] mb-1">Facility Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Kannur Fort Parking Lot"
                   value={newLocation.name}
                   onChange={(e) => setNewLocation({ ...newLocation, name: e.target.value })}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                  className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                   required
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Street Address</label>
+                  <label className="block font-bold uppercase text-[#5C6B64] mb-1">Street Address</label>
                   <input
                     type="text"
                     placeholder="Fort Road"
                     value={newLocation.street}
                     onChange={(e) => setNewLocation({ ...newLocation, street: e.target.value })}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                    className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Area</label>
+                  <label className="block font-bold uppercase text-[#5C6B64] mb-1">Area</label>
                   <input
                     type="text"
                     placeholder="Ayikkara"
                     value={newLocation.area}
                     onChange={(e) => setNewLocation({ ...newLocation, area: e.target.value })}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                    className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Base Rate (₹)</label>
+                  <label className="block font-bold uppercase text-[#5C6B64] mb-1">Base Rate (₹)</label>
                   <input
                     type="number"
                     value={newLocation.baseRate}
                     onChange={(e) => setNewLocation({ ...newLocation, baseRate: e.target.value })}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                    className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Hourly Rate (₹)</label>
+                  <label className="block font-bold uppercase text-[#5C6B64] mb-1">Hourly Rate (₹)</label>
                   <input
                     type="number"
                     value={newLocation.hourlyRate}
                     onChange={(e) => setNewLocation({ ...newLocation, hourlyRate: e.target.value })}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                    className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
@@ -278,23 +278,23 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-2.5 bg-[#176B4D] hover:bg-[#12533c] text-white font-semibold rounded-lg mt-2 cursor-pointer transition-colors"
+                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 cursor-pointer transition-all shadow-sm text-sm active:scale-95"
               >
-                {submitting ? 'Saving...' : 'Add Location'}
+                {submitting ? 'Saving Facility...' : 'Add Location'}
               </button>
             </form>
           </div>
 
-          <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-            <h2 className="text-base font-bold text-[#202722]">Active Kannur Facilities ({locations.length})</h2>
+          <div className="lg:col-span-7 bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-4">
+            <h2 className="text-base font-heading font-bold text-[#14201B]">Active Kannur Facilities ({locations.length})</h2>
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {locations.map((loc) => (
-                <div key={loc._id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs flex justify-between items-center">
+                <div key={loc._id} className="p-4 bg-[#F7F4EE] rounded-xl border border-[#E3DED2] text-xs flex justify-between items-center">
                   <div>
-                    <span className="font-bold text-sm text-[#202722] block">{loc.name}</span>
-                    <span className="text-gray-500">{loc.address.street}, {loc.address.area}</span>
+                    <span className="font-heading font-bold text-sm text-[#14201B] block">{loc.name}</span>
+                    <span className="text-[#5C6B64] font-medium">{loc.address.street}, {loc.address.area}</span>
                   </div>
-                  <span className="font-bold text-[#176B4D] bg-[#176B4D]/10 px-3 py-1 rounded-lg">
+                  <span className="font-bold text-[#0B3D2E] bg-white border border-[#E3DED2] px-3 py-1.5 rounded-lg shadow-sm">
                     ₹{loc.pricing.hourlyRate}/hr
                   </span>
                 </div>
@@ -306,48 +306,48 @@ export default function AdminDashboard() {
 
       {/* TAB 3: Staff Management */}
       {activeTab === 'staff' && (
-        <div className="max-w-xl bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-          <h2 className="text-base font-bold text-[#202722]">Register Staff Operator</h2>
-          <form onSubmit={handleCreateStaff} className="space-y-3 text-xs">
+        <div className="max-w-xl bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-4">
+          <h2 className="text-base font-heading font-bold text-[#14201B]">Register Staff Operator</h2>
+          <form onSubmit={handleCreateStaff} className="space-y-3.5 text-xs">
             <div>
-              <label className="block font-semibold mb-1">Staff Member Name</label>
+              <label className="block font-bold uppercase text-[#5C6B64] mb-1">Staff Member Name</label>
               <input
                 type="text"
                 placeholder="Full Name"
                 value={newStaff.name}
                 onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                 required
               />
             </div>
             <div>
-              <label className="block font-semibold mb-1">Staff Email Address</label>
+              <label className="block font-bold uppercase text-[#5C6B64] mb-1">Staff Email Address</label>
               <input
                 type="email"
                 placeholder="staff@parkora.in"
                 value={newStaff.email}
                 onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                 required
               />
             </div>
             <div>
-              <label className="block font-semibold mb-1">Password</label>
+              <label className="block font-bold uppercase text-[#5C6B64] mb-1">Password</label>
               <input
                 type="password"
                 placeholder="Secure Password"
                 value={newStaff.password}
                 onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
                 required
               />
             </div>
             <div>
-              <label className="block font-semibold mb-1">Assigned Facility</label>
+              <label className="block font-bold uppercase text-[#5C6B64] mb-1">Assigned Facility</label>
               <select
                 value={newStaff.assignedFacility}
                 onChange={(e) => setNewStaff({ ...newStaff, assignedFacility: e.target.value })}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none"
+                className="w-full p-3 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-sm font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               >
                 {locations.map((loc) => (
                   <option key={loc._id} value={loc._id}>{loc.name}</option>
@@ -357,9 +357,9 @@ export default function AdminDashboard() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold rounded-lg mt-2 cursor-pointer transition-colors"
+              className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 cursor-pointer transition-all shadow-sm text-sm active:scale-95"
             >
-              {submitting ? 'Creating...' : 'Create Staff Account'}
+              {submitting ? 'Creating Account...' : 'Create Staff Account'}
             </button>
           </form>
         </div>
@@ -367,42 +367,42 @@ export default function AdminDashboard() {
 
       {/* TAB 4: Master Bookings List */}
       {activeTab === 'bookings' && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E3DED2] shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-base font-bold text-[#202722]">All System Reservations ({filteredBookings.length})</h2>
+            <h2 className="text-base font-heading font-bold text-[#14201B]">All System Reservations ({filteredBookings.length})</h2>
             <div className="relative w-full sm:w-72">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3.5 top-3 w-4 h-4 text-[#5C6B64]" />
               <input
                 type="text"
                 placeholder="Filter by ref, vehicle, or user..."
                 value={bookingFilter}
                 onChange={(e) => setBookingFilter(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none"
+                className="w-full pl-10 pr-3 py-2.5 bg-[#F7F4EE] border border-[#E3DED2] rounded-xl text-xs font-semibold text-[#14201B] outline-none focus:border-[#0B3D2E]"
               />
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-gray-600">
-              <thead className="bg-gray-50 border-b border-gray-200 uppercase text-[10px] font-bold text-gray-500">
+            <table className="w-full text-left text-xs text-[#14201B]">
+              <thead className="bg-[#F7F4EE] border-b border-[#E3DED2] uppercase text-[10px] font-bold text-[#5C6B64]">
                 <tr>
-                  <th className="p-3">Booking Ref</th>
-                  <th className="p-3">Customer</th>
-                  <th className="p-3">Facility</th>
-                  <th className="p-3">Vehicle</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Amount</th>
+                  <th className="p-3.5">Booking Ref</th>
+                  <th className="p-3.5">Customer</th>
+                  <th className="p-3.5">Facility</th>
+                  <th className="p-3.5">Vehicle</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[#E3DED2]">
                 {filteredBookings.map((b) => (
-                  <tr key={b._id} className="hover:bg-gray-50/50">
-                    <td className="p-3 font-mono font-bold text-[#202722]">{b.bookingRef}</td>
-                    <td className="p-3">{b.user?.name || 'Customer'}</td>
-                    <td className="p-3">{b.location?.name}</td>
-                    <td className="p-3 font-mono">{b.vehicle?.regNumber}</td>
-                    <td className="p-3 uppercase font-bold text-[#176B4D]">{b.status}</td>
-                    <td className="p-3 font-bold text-gray-900">₹{b.pricingSnapshot?.totalAmount}</td>
+                  <tr key={b._id} className="hover:bg-[#F7F4EE]/50 transition-colors">
+                    <td className="p-3.5 font-mono font-bold text-[#0B3D2E]">{b.bookingRef}</td>
+                    <td className="p-3.5 font-semibold">{b.user?.name || 'Customer'}</td>
+                    <td className="p-3.5 font-medium text-[#5C6B64]">{b.location?.name}</td>
+                    <td className="p-3.5 font-mono uppercase font-bold">{b.vehicle?.regNumber}</td>
+                    <td className="p-3.5 uppercase font-bold text-[#145C43]">{b.status}</td>
+                    <td className="p-3.5 font-bold text-[#14201B]">₹{b.pricingSnapshot?.totalAmount}</td>
                   </tr>
                 ))}
               </tbody>

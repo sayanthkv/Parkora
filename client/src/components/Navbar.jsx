@@ -1,162 +1,114 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Menu, X, ChevronDown, User, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { MapPin, Ticket, ShieldCheck, UserCheck, LogOut, Menu, X, Car } from 'lucide-react';
 
-export default function Navbar() {
+const Navbar = () => {
+  const [menuOpen, setMenuOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
 
   return (
-    <header className="sticky top-0 z-50 bg-[#F7F8F6]/90 backdrop-blur-md border-b border-gray-200/80">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          
-          {/* Brand Logo */}
-          <Link to="/" className="flex items-center space-x-2.5 group">
-            <div className="w-9 h-9 rounded-lg bg-[#176B4D] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
-              <Car className="w-5 h-5" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-lg tracking-tight text-[#202722]">Parkora</span>
-              <span className="text-[10px] uppercase tracking-widest text-[#176B4D] font-semibold -mt-1">
-                Kannur Smart
-              </span>
-            </div>
+    <div className="fixed top-5 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+      <nav className="bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-sm rounded-full px-7 py-3 flex items-center justify-between transition-all duration-300">
+        
+        {/* Minimal Text Brand */}
+        <Link to="/" className="group focus:outline-none">
+          <span className="font-heading font-extrabold text-2xl text-slate-900 tracking-tight group-hover:text-emerald-600 transition-colors">
+            Parkora
+          </span>
+        </Link>
+
+        {/* Center Links */}
+        <div className="hidden md:flex items-center space-x-9 text-sm font-medium text-slate-700">
+          <Link to="/" className="hover:text-slate-900 transition-colors duration-200">
+            Home
           </Link>
-
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-6">
-            <Link to="/locations" className="text-sm font-medium text-gray-700 hover:text-[#176B4D] flex items-center gap-1.5 transition-colors">
-              <MapPin className="w-4 h-4 text-gray-400" />
-              Find Parking
-            </Link>
-
-            {user?.role === 'customer' && (
-              <Link to="/my-bookings" className="text-sm font-medium text-gray-700 hover:text-[#176B4D] flex items-center gap-1.5 transition-colors">
-                <Ticket className="w-4 h-4 text-gray-400" />
-                My Bookings
-              </Link>
-            )}
-
-            {user?.role === 'staff' && (
-              <Link to="/staff" className="text-sm font-semibold text-[#176B4D] bg-[#176B4D]/10 px-3 py-1.5 rounded-md flex items-center gap-1.5">
-                <UserCheck className="w-4 h-4" />
-                Staff Portal
-              </Link>
-            )}
-
-            {user?.role === 'admin' && (
-              <Link to="/admin" className="text-sm font-semibold text-purple-700 bg-purple-100 px-3 py-1.5 rounded-md flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4" />
-                Admin Console
-              </Link>
-            )}
-          </nav>
-
-          {/* User Auth Actions */}
-          <div className="hidden md:flex items-center space-x-3">
-            {user ? (
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <p className="text-xs font-semibold text-[#202722]">{user.name}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">{user.role}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Log out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <Link
-                  to="/login"
-                  className="text-sm font-medium text-gray-700 hover:text-[#176B4D] px-3 py-2 rounded-md transition-colors"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  className="text-sm font-medium text-white bg-[#176B4D] hover:bg-[#12533c] px-4 py-2 rounded-md shadow-sm transition-all"
-                >
-                  Reserve Spot
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-gray-600 hover:text-black rounded-md focus:outline-none"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
+          <Link to="/locations" className="hover:text-slate-900 transition-colors duration-200 flex items-center gap-1">
+            Locations <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+          </Link>
+          <a href="#how-it-works" className="hover:text-slate-900 transition-colors duration-200">
+            How It Works
+          </a>
+          <a href="#coverage" className="hover:text-slate-900 transition-colors duration-200">
+            Kannur Hubs
+          </a>
         </div>
-      </div>
 
-      {/* Mobile Menu Dropdown */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-gray-200 px-4 pt-3 pb-4 space-y-2">
-          <Link
-            to="/locations"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 rounded-md"
-          >
-            Find Parking
-          </Link>
-
-          {user?.role === 'customer' && (
-            <Link
-              to="/my-bookings"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 rounded-md"
-            >
-              My Bookings
-            </Link>
-          )}
-
+        {/* Right Actions */}
+        <div className="hidden md:flex items-center space-x-3">
           {user ? (
-            <button
-              onClick={() => {
-                handleLogout();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 rounded-md"
-            >
-              Log Out ({user.name})
-            </button>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-semibold text-slate-800 bg-slate-100 px-3.5 py-2 rounded-full border border-slate-200 flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-emerald-600" /> {user.name || user.email}
+              </span>
+              <button
+                onClick={() => { logout(); navigate('/'); }}
+                className="p-2 text-slate-500 hover:text-slate-900 transition-colors rounded-full border border-slate-200 hover:bg-slate-100"
+                title="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           ) : (
-            <div className="pt-2 border-t border-gray-100 flex flex-col gap-2">
+            <>
               <Link
                 to="/login"
-                onClick={() => setMobileMenuOpen(false)}
-                className="w-full text-center py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md"
+                className="text-xs font-semibold text-slate-700 hover:text-slate-900 px-4 py-2 rounded-full transition-colors"
               >
                 Sign In
               </Link>
               <Link
-                to="/register"
-                onClick={() => setMobileMenuOpen(false)}
-                className="w-full text-center py-2 text-sm font-medium text-white bg-[#176B4D] rounded-md"
+                to="/locations"
+                className="text-xs font-semibold text-white bg-slate-900 hover:bg-emerald-600 px-5 py-2.5 rounded-full transition-all duration-200 shadow-sm active:scale-95"
               >
-                Create Account
+                Book Slot
               </Link>
-            </div>
+            </>
           )}
         </div>
+
+        {/* Mobile Hamburger */}
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="md:hidden p-2 text-slate-900 border border-slate-200 rounded-full bg-white"
+        >
+          {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+      </nav>
+
+      {/* Mobile Menu Drawer */}
+      {menuOpen && (
+        <div className="md:hidden mt-3 bg-white/95 backdrop-blur-lg border border-slate-200 rounded-2xl p-6 shadow-xl space-y-3">
+          <Link to="/" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+            Home
+          </Link>
+          <Link to="/locations" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+            Locations
+          </Link>
+          <a href="#how-it-works" onClick={() => setMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">
+            How It Works
+          </a>
+          <div className="pt-3 border-t border-slate-100 flex flex-col space-y-2">
+            {!user ? (
+              <>
+                <Link to="/login" onClick={() => setMenuOpen(false)} className="w-full text-center text-xs font-semibold text-slate-800 border border-slate-200 py-2.5 rounded-full">
+                  Sign In
+                </Link>
+                <Link to="/locations" onClick={() => setMenuOpen(false)} className="w-full text-center text-xs font-semibold text-white bg-slate-900 py-2.5 rounded-full">
+                  Book Slot
+                </Link>
+              </>
+            ) : (
+              <button onClick={() => { logout(); setMenuOpen(false); }} className="w-full text-center text-xs font-semibold text-white bg-slate-900 py-2.5 rounded-full">
+                Sign Out
+              </button>
+            )}
+          </div>
+        </div>
       )}
-    </header>
+    </div>
   );
-}
+};
+
+export default Navbar;
