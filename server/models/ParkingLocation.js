@@ -24,20 +24,20 @@ const parkingLocationSchema = new mongoose.Schema(
       lat: { type: Number, required: true },
       lng: { type: Number, required: true },
     },
-    description: String,
+    description: { type: String, default: '' },
+    amenities: [{ type: String }], // Points like '24/7 Access', 'CCTV', 'Covered Parking'
     imageUrl: String,
     operatingHours: {
       is24x7: { type: Boolean, default: true },
-      openTime: { type: String, default: '00:00' }, // HH:mm format
+      openTime: { type: String, default: '00:00' },
       closeTime: { type: String, default: '23:59' },
     },
-    amenities: [{ type: String }], // e.g., ['CCTV', 'EV Charging', 'Covered Parking', 'Valet']
     supportedVehicleTypes: [{
       type: String,
       enum: ['car', 'bike', 'ev', 'heavy'],
     }],
     pricing: {
-      hourlyRate: { type: Number, required: true }, // Rates in INR (₹)
+      hourlyRate: { type: Number, required: true },
       baseRate: { type: Number, default: 0 },
       baseHours: { type: Number, default: 1 },
       gracePeriodMinutes: { type: Number, default: 15 },

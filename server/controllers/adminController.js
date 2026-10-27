@@ -245,3 +245,59 @@ exports.getAllBookings = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// @desc    Create a new parking facility
+exports.createLocation = async (req, res) => {
+  try {
+    const locationData = { ...req.body };
+
+    // Process amenities array if sent as comma-separated string or array
+    if (typeof locationData.amenities === 'string') {
+      locationData.amenities = locationData.amenities
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    if (req.file) {
+      locationData.imageUrl = req.file.path;
+    }
+
+    const location = await ParkingLocation.create(locationData);
+    res.status(201).json({ success: true, data: location });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update a parking facility
+exports.updateLocation = async (req, res) => {
+  try {
+    const updateData = { ...req.body };
+
+    // Process amenities array if sent as comma-separated string or array
+    if (typeof updateData.amenities === 'string') {
+      updateData.amenities = updateData.amenities
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    if (req.file) {
+      updateData.imageUrl = req.file.path;
+    }
+
+    const location = await ParkingLocation.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!location) {
+      return res.status(404).json({ success: false, message: 'Facility not found.' });
+    }
+
+    res.status(200).json({ success: true, data: location });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

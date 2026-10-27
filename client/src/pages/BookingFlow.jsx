@@ -1,11 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import API from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
   MapPin, ArrowRight, ArrowLeft, Zap, Info,
-  CheckCircle2, AlertCircle, ShieldCheck
+  CheckCircle2, AlertCircle, ShieldCheck, Building
 } from 'lucide-react';
+
+// Helper to get current time string (HH:mm) rounded to the next 15-minute interval
+const getCurrentTimeString = () => {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const roundedMinutes = Math.ceil(minutes / 15) * 15;
+  if (roundedMinutes === 60) {
+    now.setHours(now.getHours() + 1);
+    now.setMinutes(0);
+  } else {
+    now.setMinutes(roundedMinutes);
+  }
+  const hours = String(now.getHours()).padStart(2, '0');
+  const mins = String(now.getMinutes()).padStart(2, '0');
+  return `${hours}:${mins}`;
+};
 
 export default function BookingFlow() {
   const { slug } = useParams();
@@ -13,15 +29,16 @@ export default function BookingFlow() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [step, setStep] = useState(1);
+  const todayStr = new Date().toISOString().split('T')[0];
 
+  const [step, setStep] = useState(1);
   const [location, setLocation] = useState(null);
   const [floors, setFloors] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState(null);
   const [bays, setBays] = useState([]);
 
-  const [date, setDate] = useState(searchParams.get('date') || new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState(searchParams.get('startTime') || '14:00');
+  const [date, setDate] = useState(searchParams.get('date') || todayStr);
+  const [startTime, setStartTime] = useState(searchParams.get('startTime') || getCurrentTimeString());
   const [durationHours, setDurationHours] = useState(searchParams.get('durationHours') || '2');
   const [vehicleType, setVehicleType] = useState(searchParams.get('vehicleType') || 'car');
   const [vehicleReg, setVehicleReg] = useState(user?.vehicles?.[0]?.regNumber || 'KL 13 AS 1234');
@@ -36,10 +53,13 @@ export default function BookingFlow() {
     const fetchLocationData = async () => {
       try {
         const res = await API.get(`/locations/${slug}`);
-        setLocation(res.data.data.location);
-        setFloors(res.data.data.floors);
-        if (res.data.data.floors.length > 0) {
-          setSelectedFloor(res.data.data.floors[0]);
+        const locData = res.data.data.location;
+        const floorData = res.data.data.floors || [];
+        
+        setLocation(locData);
+        setFloors(floorData);
+        if (floorData.length > 0) {
+          setSelectedFloor(floorData[0]);
         }
       } catch (err) {
         setError('Failed to load facility floor details.');
@@ -50,14 +70,53 @@ export default function BookingFlow() {
     fetchLocationData();
   }, [slug]);
 
+  // Extract supported vehicle types dynamically from location or its floor bays
+  const availableVehicleTypes = useMemo(() => {
+    if (!location) return [];
+
+    let types = location.supportedVehicleTypes || location.allowedVehicles || [];
+    
+    if (!types.length && floors.length) {
+      const extracted = new Set();
+      floors.forEach(fl => {
+        fl.bays?.forEach(b => {
+          if (b.supportedVehicleType) extracted.add(b.supportedVehicleType);
+          if (b.isEVCharging) extracted.add('ev');
+        });
+      });
+      types = Array.from(extracted);
+    }
+
+    if (!types.length) {
+      types = ['car', 'bike', 'ev'];
+    }
+
+    return types;
+  }, [location, floors]);
+
+  // Ensure selected vehicleType is valid for the location
+  useEffect(() => {
+    if (availableVehicleTypes.length > 0 && !availableVehicleTypes.includes(vehicleType)) {
+      setVehicleType(availableVehicleTypes[0]);
+    }
+  }, [availableVehicleTypes, vehicleType]);
+
   const getStartAndEndDates = () => {
     const start = new Date(`${date}T${startTime}`);
     const end = new Date(start.getTime() + parseInt(durationHours) * 60 * 60 * 1000);
     return { start, end };
   };
 
+  // Validate if selected start time is in the past
+  const isPastTime = useMemo(() => {
+    if (!date || !startTime) return false;
+    const selectedStart = new Date(`${date}T${startTime}`);
+    const now = new Date();
+    return selectedStart < now;
+  }, [date, startTime]);
+
   useEffect(() => {
-    if (!location || !selectedFloor) return;
+    if (!location || !selectedFloor || isPastTime) return;
 
     const fetchBayAvailability = async () => {
       setLoadingBays(true);
@@ -74,7 +133,7 @@ export default function BookingFlow() {
             },
           }
         );
-        setBays(res.data.data);
+        setBays(res.data.data || []);
       } catch (err) {
         setError('Error checking real-time bay availability.');
       } finally {
@@ -83,7 +142,16 @@ export default function BookingFlow() {
     };
 
     fetchBayAvailability();
-  }, [selectedFloor, date, startTime, durationHours, vehicleType]);
+  }, [selectedFloor, date, startTime, durationHours, vehicleType, isPastTime]);
+
+  const handleNextToStep2 = () => {
+    if (isPastTime) {
+      setError('Selected arrival time has already passed. Please select a future date and time.');
+      return;
+    }
+    setError(null);
+    setStep(2);
+  };
 
   const handleConfirmBooking = async () => {
     if (!user) {
@@ -92,6 +160,12 @@ export default function BookingFlow() {
     }
 
     if (!selectedBay) return;
+
+    if (isPastTime) {
+      setError('Cannot reserve for a past time window.');
+      setStep(1);
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
@@ -132,7 +206,14 @@ export default function BookingFlow() {
   if (!location) return <div className="py-28 text-center text-red-600 font-medium bg-white min-h-screen">Location not found.</div>;
 
   const { start, end } = getStartAndEndDates();
-  const calculatedTotal = parseInt(durationHours) * location.pricing.hourlyRate;
+  const calculatedTotal = parseInt(durationHours) * (location.pricing?.hourlyRate || location.price || 30);
+
+  const vehicleLabels = {
+    car: 'Car / SUV',
+    bike: 'Two Wheeler',
+    ev: 'EV Vehicle',
+    truck: 'Heavy Vehicle / Bus'
+  };
 
   return (
     <div className="min-h-screen bg-white text-slate-900 pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto font-body">
@@ -147,7 +228,7 @@ export default function BookingFlow() {
         </button>
         <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">{location.name}</h1>
         <p className="text-xs text-slate-500 flex items-center gap-1 mt-1 font-medium">
-          <MapPin className="w-3.5 h-3.5 text-[#0B3D2E]" /> {location.address.street}, {location.address.area}
+          <MapPin className="w-3.5 h-3.5 text-[#0B3D2E]" /> {location.address?.street}, {location.address?.area}
         </p>
       </div>
 
@@ -187,7 +268,7 @@ export default function BookingFlow() {
               <input
                 type="date"
                 value={date}
-                min={new Date().toISOString().split('T')[0]}
+                min={todayStr}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               />
@@ -200,9 +281,17 @@ export default function BookingFlow() {
               <input
                 type="time"
                 value={startTime}
+                min={date === todayStr ? getCurrentTimeString() : undefined}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                className={`w-full p-3 bg-white border rounded-xl text-sm font-semibold outline-none ${
+                  isPastTime ? 'border-red-500 text-red-600' : 'border-slate-200 text-slate-900 focus:border-[#0B3D2E]'
+                }`}
               />
+              {isPastTime && (
+                <p className="text-[11px] text-red-600 font-semibold mt-1">
+                  Selected time has already passed.
+                </p>
+              )}
             </div>
 
             <div>
@@ -216,19 +305,25 @@ export default function BookingFlow() {
                 <option value="2">2 Hours</option>
                 <option value="4">4 Hours</option>
                 <option value="8">8 Hours</option>
+                <option value="12">12 Hours</option>
+                <option value="24">24 Hours (Full Day)</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vehicle Type</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Available Vehicle Types
+              </label>
               <select
                 value={vehicleType}
                 onChange={(e) => setVehicleType(e.target.value)}
                 className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
               >
-                <option value="car">Car / SUV</option>
-                <option value="bike">Two Wheeler</option>
-                <option value="ev">EV Vehicle</option>
+                {availableVehicleTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {vehicleLabels[type] || type.toUpperCase()}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -246,9 +341,9 @@ export default function BookingFlow() {
           </div>
 
           <button
-            onClick={() => setStep(2)}
-            disabled={!vehicleReg.trim()}
-            className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
+            onClick={handleNextToStep2}
+            disabled={!vehicleReg.trim() || isPastTime}
+            className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm active:scale-95"
           >
             Select Floor & Bay
             <ArrowRight className="w-4 h-4" />
@@ -263,24 +358,26 @@ export default function BookingFlow() {
             <div>
               <h2 className="text-lg font-heading font-bold text-slate-900">Step 2: Choose Your Parking Bay</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                24-Hr Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
+                Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
               </p>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-              {floors.map((fl) => (
-                <button
-                  key={fl._id}
-                  onClick={() => {
-                    setSelectedFloor(fl);
-                    setSelectedBay(null);
-                  }}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${selectedFloor?._id === fl._id ? 'bg-[#0B3D2E] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                >
-                  {fl.name}
-                </button>
-              ))}
-            </div>
+            {floors.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                {floors.map((fl) => (
+                  <button
+                    key={fl._id}
+                    onClick={() => {
+                      setSelectedFloor(fl);
+                      setSelectedBay(null);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${selectedFloor?._id === fl._id ? 'bg-[#0B3D2E] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    {fl.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-6 text-xs font-semibold text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
@@ -297,7 +394,7 @@ export default function BookingFlow() {
 
           {loadingBays ? (
             <div className="py-12 text-center text-xs font-medium text-slate-500">Checking bay availability...</div>
-          ) : (
+          ) : bays.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
               {bays.map((b) => {
                 const isSelected = selectedBay?._id === b._id;
@@ -327,6 +424,16 @@ export default function BookingFlow() {
                   </button>
                 );
               })}
+            </div>
+          ) : (
+            <div className="py-12 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <Building className="w-8 h-8 text-slate-400 mx-auto" />
+              <p className="text-sm font-bold text-slate-700">No bays available for this selection.</p>
+              <p className="text-xs text-slate-500">
+                {floors.length === 0 
+                  ? "No floors/bays are configured for this facility yet in the database." 
+                  : "Try selecting another floor or changing the vehicle type."}
+              </p>
             </div>
           )}
 
@@ -375,7 +482,7 @@ export default function BookingFlow() {
             </div>
             <div className="flex justify-between border-b border-slate-200 pb-2.5">
               <span className="text-slate-500 font-medium">Hourly Rate x Duration:</span>
-              <span className="font-semibold text-slate-900">₹{location.pricing.hourlyRate} x {durationHours} hrs</span>
+              <span className="font-semibold text-slate-900">₹{location.pricing?.hourlyRate || location.price || 30} x {durationHours} hrs</span>
             </div>
             <div className="flex justify-between pt-1 text-sm font-extrabold">
               <span className="text-slate-900">Total Payable at Facility:</span>

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import API from '../api/axios';
 import {
-  ShieldCheck, MapPin, Users, Ticket, IndianRupee,
-  PlusCircle, RefreshCw, AlertCircle, CheckCircle2, Search, Building,
-  Image as ImageIcon, UserCheck, UserX, UserPlus, X, Edit, Trash2, PieChart as PieIcon, BarChart3
+  ShieldCheck, Users, RefreshCw, AlertCircle, CheckCircle2, Search, Building,
+  Image as ImageIcon, UserCheck, UserX, X, Edit, Trash2, PieChart as PieIcon, BarChart3
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
@@ -27,6 +26,8 @@ export default function AdminDashboard() {
   const [newLocation, setNewLocation] = useState({
     name: '',
     slug: '',
+    description: '',
+    amenities: '24/7 Access, CCTV, Covered Parking',
     street: '',
     area: '',
     hourlyRate: 30,
@@ -36,7 +37,6 @@ export default function AdminDashboard() {
     imageUrl: '',
   });
 
-  // Raw File States for Cloudinary Uploads
   const [selectedFile, setSelectedFile] = useState(null);
   const [editSelectedFile, setEditSelectedFile] = useState(null);
 
@@ -84,7 +84,6 @@ export default function AdminDashboard() {
     fetchAdminData();
   }, []);
 
-  // Image Upload Handlers (Stores both File Object for API and Base64 for Preview)
   const handleImageChange = (e, targetForm = 'new') => {
     const file = e.target.files[0];
     if (file) {
@@ -106,7 +105,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Create Facility with Multipart FormData
+  // Create Facility
   const handleCreateLocation = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -117,6 +116,8 @@ export default function AdminDashboard() {
       const formData = new FormData();
       formData.append('name', newLocation.name);
       formData.append('slug', newLocation.slug || newLocation.name.toLowerCase().replace(/\s+/g, '-'));
+      formData.append('description', newLocation.description);
+      formData.append('amenities', newLocation.amenities);
       formData.append('address[street]', newLocation.street);
       formData.append('address[area]', newLocation.area);
       formData.append('address[city]', 'Kannur');
@@ -134,9 +135,21 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      setMessage('New parking facility created successfully with Cloudinary storage.');
+      setMessage('New parking facility created successfully.');
       setSelectedFile(null);
-      setNewLocation({ name: '', slug: '', street: '', area: '', hourlyRate: 30, baseRate: 20, lat: 11.8689, lng: 75.3725, imageUrl: '' });
+      setNewLocation({
+        name: '',
+        slug: '',
+        description: '',
+        amenities: '24/7 Access, CCTV, Covered Parking',
+        street: '',
+        area: '',
+        hourlyRate: 30,
+        baseRate: 20,
+        lat: 11.8689,
+        lng: 75.3725,
+        imageUrl: '',
+      });
       fetchAdminData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create facility.');
@@ -145,7 +158,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Update Facility with Multipart FormData
+  // Update Facility
   const handleUpdateLocation = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -155,6 +168,13 @@ export default function AdminDashboard() {
     try {
       const formData = new FormData();
       formData.append('name', editingFacility.name);
+      formData.append('description', editingFacility.description || '');
+      
+      const amenitiesVal = Array.isArray(editingFacility.amenities)
+        ? editingFacility.amenities.join(', ')
+        : editingFacility.amenities || '';
+      formData.append('amenities', amenitiesVal);
+
       formData.append('address[street]', editingFacility.address?.street || editingFacility.street || '');
       formData.append('address[area]', editingFacility.address?.area || editingFacility.area || '');
       formData.append('address[city]', 'Kannur');
@@ -170,7 +190,7 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      setMessage('Facility updated successfully with Cloudinary storage.');
+      setMessage('Facility updated successfully.');
       setEditSelectedFile(null);
       setEditingFacility(null);
       fetchAdminData();
@@ -181,7 +201,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Delete Facility
   const handleDeleteLocation = async (facilityId, facilityName) => {
     if (!window.confirm(`Are you sure you want to permanently delete "${facilityName}"?`)) return;
 
@@ -198,7 +217,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Create Staff
   const handleCreateStaff = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -217,13 +235,12 @@ export default function AdminDashboard() {
     }
   };
 
-  // Staff Reassignment Handler
   const handleReassignStaff = async (staffId, facilityId) => {
     setSubmitting(true);
     setError(null);
     try {
       await API.patch(`/admin/staff/${staffId}/assign`, { facilityId });
-      setMessage('Staff reassigned to facility successfully.');
+      setMessage('Staff reassigned successfully.');
       setSelectedFacility(null);
       fetchAdminData();
     } catch (err) {
@@ -233,7 +250,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Staff Deactivation Handler
   const handleDeactivateStaff = async (staffId) => {
     if (!window.confirm('Are you sure you want to deactivate this staff account?')) return;
     setSubmitting(true);
@@ -257,7 +273,6 @@ export default function AdminDashboard() {
       b.user?.name?.toLowerCase().includes(bookingFilter.toLowerCase())
   );
 
-  // --- CHART DATA GENERATION ---
   const activeBookedCount = metrics?.activeBookings ?? 0;
   const totalBays = metrics?.totalBays ?? 200;
   const availableBaysCount = Math.max(0, totalBays - activeBookedCount);
@@ -296,7 +311,7 @@ export default function AdminDashboard() {
         </button>
       </div>
 
-      {/* Tabs */}
+      {/* Navigation Tabs */}
       <div className="flex border-b border-slate-200 gap-6 text-xs sm:text-sm font-bold uppercase tracking-wider">
         <button
           onClick={() => setActiveTab('metrics')}
@@ -338,10 +353,9 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 1: Metrics & Visual Charts Overview */}
+      {/* TAB 1: System Overview */}
       {activeTab === 'metrics' && (
         <div className="space-y-8">
-          {/* Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
               <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest block">Configured Facilities</span>
@@ -361,9 +375,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Visual Data Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Pie Chart: Bay Occupancy */}
             <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex items-center gap-2">
                 <PieIcon className="w-4 h-4 text-[#0B3D2E]" />
@@ -384,7 +396,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Bar Chart: Revenue by Facility */}
             <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#0B3D2E]" />
@@ -406,13 +417,13 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 2: Facility Management & CRUD */}
+      {/* TAB 2: Facility Management */}
       {activeTab === 'locations' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Add Facility Form */}
           <div className="lg:col-span-5 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-slate-900">Add New Facility</h2>
-            <form onSubmit={handleCreateLocation} className="space-y-3.5 text-xs">
+            <form onSubmit={handleCreateLocation} className="space-y-3 text-xs">
               <div>
                 <label className="block font-bold uppercase text-slate-500 mb-1">Facility Name</label>
                 <input
@@ -422,6 +433,28 @@ export default function AdminDashboard() {
                   onChange={(e) => setNewLocation({ ...newLocation, name: e.target.value })}
                   className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Description</label>
+                <textarea
+                  rows={2}
+                  placeholder="Overview description for public listing..."
+                  value={newLocation.description}
+                  onChange={(e) => setNewLocation({ ...newLocation, description: e.target.value })}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-[#0B3D2E]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Feature Points / Amenities (Comma Separated)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 24/7 Access, CCTV, Covered Parking"
+                  value={newLocation.amenities}
+                  onChange={(e) => setNewLocation({ ...newLocation, amenities: e.target.value })}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                 />
               </div>
 
@@ -436,7 +469,7 @@ export default function AdminDashboard() {
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-slate-100 file:text-xs file:font-bold file:text-slate-800 hover:file:bg-slate-200 cursor-pointer"
                 />
                 {newLocation.imageUrl && (
-                  <div className="mt-2.5 relative rounded-xl overflow-hidden h-32 border border-slate-200">
+                  <div className="mt-2.5 relative rounded-xl overflow-hidden h-28 border border-slate-200">
                     <img src={newLocation.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
@@ -476,6 +509,7 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold uppercase text-slate-500 mb-1">Base Rate (₹)</label>
@@ -498,6 +532,7 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
+
               <button
                 type="submit"
                 disabled={submitting}
@@ -508,65 +543,83 @@ export default function AdminDashboard() {
             </form>
           </div>
 
-          {/* Facilities List & Action Controls */}
+          {/* Active Facilities List */}
           <div className="lg:col-span-7 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-slate-900">Active Kannur Facilities ({locations.length})</h2>
-            <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
               {locations.map((loc) => {
                 const assignedStaff = staffList.find(
                   (s) => s.assignedFacility?._id === loc._id || s.assignedFacility === loc._id
                 );
-
                 const facilityImage = loc.imageUrl || loc.image;
 
                 return (
-                  <div key={loc._id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      {facilityImage ? (
-                        <img src={facilityImage} alt={loc.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
-                          <Building className="w-5 h-5 text-slate-500" />
+                  <div key={loc._id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {facilityImage ? (
+                          <img src={facilityImage} alt={loc.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
+                            <Building className="w-5 h-5 text-slate-500" />
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-heading font-bold text-sm text-slate-900 block">{loc.name}</span>
+                          <span className="text-slate-500 font-medium">{loc.address?.street}, {loc.address?.area}</span>
                         </div>
-                      )}
-                      <div>
-                        <span className="font-heading font-bold text-sm text-slate-900 block">{loc.name}</span>
-                        <span className="text-slate-500 font-medium">{loc.address?.street}, {loc.address?.area}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <span className="font-bold text-[#0B3D2E] bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm">
+                          ₹{loc.pricing?.hourlyRate}/hr
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFacility({ loc, assignedStaff })}
+                          className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200"
+                          title="View Staff"
+                        >
+                          <Users className="w-3.5 h-3.5 text-[#0B3D2E]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditSelectedFile(null);
+                            setEditingFacility({
+                              ...loc,
+                              amenities: Array.isArray(loc.amenities) ? loc.amenities.join(', ') : loc.amenities || '',
+                            });
+                          }}
+                          className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200"
+                          title="Edit Facility"
+                        >
+                          <Edit className="w-3.5 h-3.5 text-blue-600" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLocation(loc._id, loc.name)}
+                          className="p-2 bg-white hover:bg-red-50 text-red-600 rounded-lg border border-slate-200"
+                          title="Delete Facility"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
-                      <span className="font-bold text-[#0B3D2E] bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg shadow-sm">
-                        ₹{loc.pricing?.hourlyRate}/hr
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedFacility({ loc, assignedStaff })}
-                        className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200"
-                        title="View Staff"
-                      >
-                        <Users className="w-3.5 h-3.5 text-[#0B3D2E]" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditSelectedFile(null);
-                          setEditingFacility(loc);
-                        }}
-                        className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200"
-                        title="Edit Facility"
-                      >
-                        <Edit className="w-3.5 h-3.5 text-blue-600" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteLocation(loc._id, loc.name)}
-                        className="p-2 bg-white hover:bg-red-50 text-red-600 rounded-lg border border-slate-200"
-                        title="Delete Facility"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {loc.description && (
+                      <p className="text-[11px] text-slate-600 line-clamp-2">{loc.description}</p>
+                    )}
+
+                    {loc.amenities && loc.amenities.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {loc.amenities.map((item, idx) => (
+                          <span key={idx} className="bg-white text-slate-700 px-2 py-0.5 rounded-full border border-slate-200 text-[10px] font-semibold">
+                            ✓ {item}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -685,7 +738,7 @@ export default function AdminDashboard() {
       {/* EDIT FACILITY MODAL */}
       {editingFacility && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 sm:p-8 space-y-4 shadow-2xl relative">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 sm:p-8 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => {
                 setEditSelectedFile(null);
@@ -696,6 +749,7 @@ export default function AdminDashboard() {
               <X className="w-4 h-4" />
             </button>
             <h3 className="text-lg font-heading font-extrabold text-slate-900">Edit Facility Details</h3>
+            
             <form onSubmit={handleUpdateLocation} className="space-y-3 text-xs">
               <div>
                 <label className="block font-bold uppercase text-slate-500 mb-1">Facility Name</label>
@@ -709,7 +763,29 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Image</label>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Description</label>
+                <textarea
+                  rows={3}
+                  value={editingFacility.description || ''}
+                  onChange={(e) => setEditingFacility({ ...editingFacility, description: e.target.value })}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                  placeholder="Overview description..."
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Feature Points / Amenities (Comma Separated)</label>
+                <input
+                  type="text"
+                  value={editingFacility.amenities || ''}
+                  onChange={(e) => setEditingFacility({ ...editingFacility, amenities: e.target.value })}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                  placeholder="24/7 Access, CCTV, Covered Parking"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Cover Image</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -744,10 +820,33 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold uppercase text-slate-500 mb-1">Base Rate (₹)</label>
+                  <input
+                    type="number"
+                    value={editingFacility.pricing?.baseRate ?? editingFacility.baseRate ?? 0}
+                    onChange={(e) => setEditingFacility({ ...editingFacility, baseRate: e.target.value })}
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold uppercase text-slate-500 mb-1">Hourly Rate (₹)</label>
+                  <input
+                    type="number"
+                    value={editingFacility.pricing?.hourlyRate ?? editingFacility.hourlyRate ?? 30}
+                    onChange={(e) => setEditingFacility({ ...editingFacility, hourlyRate: e.target.value })}
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                    required
+                  />
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] text-white font-bold rounded-xl mt-2 text-sm shadow-sm active:scale-95"
+                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 text-sm shadow-sm active:scale-95 cursor-pointer transition-all"
               >
                 {submitting ? 'Updating...' : 'Save Changes'}
               </button>
