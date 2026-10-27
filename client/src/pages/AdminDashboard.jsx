@@ -1593,15 +1593,29 @@ export default function AdminDashboard() {
               </label>
               <div className="flex gap-2">
                 <select
-                  value={reassignStaffId}
-                  onChange={(e) => setReassignStaffId(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                >
-                  <option value="">Select Active Staff Member...</option>
-                  {activeStaffList.map((s) => (
-                    <option key={s._id} value={s._id}>{s.name} ({s.email})</option>
-                  ))}
-                </select>
+  value={reassignStaffId}
+  onChange={(e) => setReassignStaffId(e.target.value)}
+  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+>
+  <option value="">Select Active Staff Member...</option>
+  {activeStaffList.map((s) => {
+    const isAssignedToThis = s.assignedFacility?._id === selectedFacility?.loc?._id || s.assignedFacility === selectedFacility?.loc?._id;
+    const isAssignedToOther = s.assignedFacility && !isAssignedToThis;
+
+    let labelSuffix = '';
+    if (isAssignedToThis) {
+      labelSuffix = ' — (Currently Assigned Here)';
+    } else if (isAssignedToOther) {
+      labelSuffix = ' — (Already Assigned)';
+    }
+
+    return (
+      <option key={s._id} value={s._id}>
+        {s.name} ({s.email}){labelSuffix}
+      </option>
+    );
+  })}
+</select>
                 <button
                   type="button"
                   disabled={!reassignStaffId || submitting}
