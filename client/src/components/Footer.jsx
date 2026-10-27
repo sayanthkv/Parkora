@@ -4,8 +4,9 @@ import { MapPin, Mail, Phone, ArrowUpRight } from 'lucide-react';
 
 const Footer = () => {
   return (
-    <footer className="bg-slate-900 text-white pt-16 pb-12 border-t border-slate-800">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <footer className="w-full bg-slate-900 text-white pt-16 pb-12 border-t border-slate-800">
+      {/* 100% Full-Width Container with Generous Side Padding */}
+      <div className="w-full px-6 sm:px-12 lg:px-16">
         
         {/* Main Footer Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 pb-12 border-b border-slate-800">

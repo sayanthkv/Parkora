@@ -1,10 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, ArrowRight, Building } from 'lucide-react';
+import { MapPin, ArrowRight, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import API from '../api/axios';
+import heroBg from '../assets/knr.jpg';
 
 const DEFAULT_FACILITY_IMAGE = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800';
+
+// Fast & Ultra-Smooth Animated Counter
+const CountUpNumber = ({ end, duration = 900, prefix = '', suffix = '', padZero = false }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    let animationFrame;
+
+    const animate = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      // Fast ease-out quart curve (snappy initial rise, soft landing)
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+      setCount(Math.floor(easeOutQuart * end));
+
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animate);
+      } else {
+        setCount(end);
+      }
+    };
+
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [end, duration]);
+
+  const formattedCount = padZero && count < 10 ? `0${count}` : count;
+
+  return <span>{prefix}{formattedCount}{suffix}</span>;
+};
 
 const Home = () => {
   const [locations, setLocations] = useState([]);
@@ -14,7 +47,6 @@ const Home = () => {
     const fetchLocations = async () => {
       try {
         const response = await API.get('/locations');
-        // Handles both res.data.data or direct array res.data
         const locationData = Array.isArray(response.data)
           ? response.data
           : (response.data?.data || []);
@@ -33,26 +65,27 @@ const Home = () => {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.3 }}
       className="bg-slate-50 text-slate-900 min-h-screen w-full font-body"
     >
       
       {/* HERO SECTION WITH BACKDROP IMAGE */}
-      <section className="relative min-h-[85vh] flex flex-col justify-between pt-36 pb-24 overflow-hidden">
+      <section className="relative min-h-[90vh] flex flex-col justify-between pt-36 pb-36 sm:pb-44 overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=1920"
+            src={heroBg}
             alt="Kannur Landscape"
             className="w-full h-full object-cover object-center scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/55 to-slate-950/75" />
         </div>
 
+        {/* HERO MAIN TEXT CONTENT */}
         <motion.div 
-          initial={{ opacity: 0, y: 25 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="relative z-10 max-w-4xl mx-auto px-4 text-center text-white space-y-6 my-auto"
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 max-w-4xl mx-auto px-4 text-center text-white space-y-6 my-auto mb-16"
         >
           <span className="inline-block text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-4 py-1.5 rounded-full">
             Smart Transport Operations
@@ -63,7 +96,7 @@ const Home = () => {
           <p className="text-base sm:text-xl text-slate-200 max-w-2xl mx-auto font-normal leading-relaxed">
             Pre-book guaranteed parking bays across Kannur public stations, transit hubs, and coastal destinations.
           </p>
-          <div className="pt-2">
+          <div className="pt-3">
             <Link
               to="/locations"
               className="inline-flex items-center gap-2 bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-bold text-sm px-8 py-3.5 rounded-full transition-all duration-300 shadow-lg active:scale-95 cursor-pointer"
@@ -73,10 +106,10 @@ const Home = () => {
           </div>
         </motion.div>
 
-        {/* Bottom Curved Wave Divider */}
+        {/* BOTTOM CURVED WAVE DIVIDER */}
         <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
           <svg
-            className="w-full h-16 sm:h-24 text-slate-50 fill-current"
+            className="w-full h-20 sm:h-28 text-slate-50 fill-current"
             viewBox="0 0 1440 120"
             preserveAspectRatio="none"
           >
@@ -84,28 +117,34 @@ const Home = () => {
           </svg>
         </div>
 
-        {/* OVERLAPPING FLOATING STATS CARD */}
+        {/* FAST & SMOOTH SLIDE-UP STATS CARD */}
         <motion.div 
           initial={{ opacity: 0, y: 35 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="relative z-20 max-w-5xl mx-auto px-4 w-full -mb-32 sm:-mb-24"
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-20 max-w-5xl mx-auto px-4 w-full -mb-10 sm:-mb-12 will-change-transform"
         >
           <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-3xl shadow-xl p-8 sm:p-10 grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-slate-200">
             <div className="text-center px-4 pt-4 md:pt-0">
-              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">200+</h2>
+              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">
+                <CountUpNumber end={200} suffix="+" duration={900} />
+              </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Active Parking Bays</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">Railway Station, KSRTC Stand, and Beach complexes in Kannur.</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
-              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-emerald-600">100%</h2>
+              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-emerald-600">
+                <CountUpNumber end={100} suffix="%" duration={900} />
+              </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Real-Time Guarantee</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">Non-overlapping interval calculations validated server-side.</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
-              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">05</h2>
+              <h2 className="font-heading text-4xl sm:text-5xl font-extrabold text-slate-900">
+                <CountUpNumber end={4} padZero duration={750} />
+              </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Major Transit Hubs</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">Instant gate check-in via digital QR pass scanning.</p>
             </div>
@@ -113,10 +152,8 @@ const Home = () => {
         </motion.div>
       </section>
 
-      <div className="pt-36 sm:pt-28" />
-
       {/* DYNAMIC LOCATIONS PREVIEW GRID */}
-      <section id="coverage" className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-28">
+      <section id="coverage" className="pt-20 pb-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-28">
         <div className="text-center max-w-xl mx-auto mb-12">
           <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3.5 py-1 rounded-full border border-emerald-200">
             Featured Locations
@@ -144,16 +181,19 @@ const Home = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {locations.slice(0, 3).map((loc, index) => {
-              // Read imageUrl (matches schema) with fallback to legacy image or default
               const displayImg = loc.imageUrl || loc.image || DEFAULT_FACILITY_IMAGE;
+              
+              // Dynamic status calculation
+              const hasAvailableCount = typeof loc.availableBaysCount === 'number';
+              const availableCount = loc.availableBaysCount ?? loc.availableBays;
 
               return (
                 <motion.div 
                   key={loc._id || loc.id} 
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 15 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  transition={{ duration: 0.4, delay: index * 0.08 }}
                   whileHover={{ y: -4 }}
                   className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md flex flex-col justify-between"
                 >
@@ -180,9 +220,20 @@ const Home = () => {
 
                   <div className="p-6 pt-0">
                     <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-semibold">
-                      <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                        {loc.availableBaysCount ?? loc.availableBays ?? 12} Free Bays
-                      </span>
+                      
+                      {/* PROFESSIONAL STATUS BADGE */}
+                      {hasAvailableCount ? (
+                        <span className="inline-flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 font-bold text-[11px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          {availableCount} Bays Available
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 font-bold text-[11px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          24/7 Gate Access
+                        </span>
+                      )}
+
                       <Link
                         to="/locations"
                         className="text-slate-900 font-bold flex items-center gap-1 hover:text-emerald-600 transition-colors"
