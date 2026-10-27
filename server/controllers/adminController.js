@@ -37,7 +37,7 @@ exports.getAdminMetrics = async (req, res) => {
   }
 };
 
-// @desc    Create a new parking facility (Handles Multer Cloudinary Upload)
+// @desc    Create a new parking facility
 // @route   POST /api/admin/locations
 // @access  Private (Admin)
 exports.createLocation = async (req, res) => {
@@ -96,7 +96,7 @@ exports.updateLocation = async (req, res) => {
   }
 };
 
-// @desc    Delete a parking facility (Cascades floor and bay removal)
+// @desc    Delete a parking facility
 // @route   DELETE /api/admin/locations/:id
 // @access  Private (Admin)
 exports.deleteLocation = async (req, res) => {
@@ -107,11 +107,9 @@ exports.deleteLocation = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Parking facility not found.' });
     }
 
-    // Cascade deletion of attached floors and bays
     await ParkingBay.deleteMany({ location: req.params.id });
     await Floor.deleteMany({ location: req.params.id });
 
-    // Unassign staff attached to this facility
     await User.updateMany(
       { assignedFacility: req.params.id },
       { $unset: { assignedFacility: '' } }
@@ -125,9 +123,6 @@ exports.deleteLocation = async (req, res) => {
 
 // --- FLOOR & BAY CONTROLLERS ---
 
-// @desc    Get floors and bays for a facility
-// @route   GET /api/admin/locations/:locationId/structure
-// @access  Private (Admin)
 exports.getLocationStructure = async (req, res) => {
   try {
     const { locationId } = req.params;
@@ -143,9 +138,6 @@ exports.getLocationStructure = async (req, res) => {
   }
 };
 
-// @desc    Create a new Floor for a Facility
-// @route   POST /api/admin/locations/:locationId/floors
-// @access  Private (Admin)
 exports.createFloor = async (req, res) => {
   try {
     const { locationId } = req.params;
@@ -164,9 +156,6 @@ exports.createFloor = async (req, res) => {
   }
 };
 
-// @desc    Update a Floor
-// @route   PUT /api/admin/floors/:floorId
-// @access  Private (Admin)
 exports.updateFloor = async (req, res) => {
   try {
     const { floorId } = req.params;
@@ -182,9 +171,6 @@ exports.updateFloor = async (req, res) => {
   }
 };
 
-// @desc    Delete a Floor and its associated Bays
-// @route   DELETE /api/admin/floors/:floorId
-// @access  Private (Admin)
 exports.deleteFloor = async (req, res) => {
   try {
     const { floorId } = req.params;
@@ -196,22 +182,20 @@ exports.deleteFloor = async (req, res) => {
   }
 };
 
-// @desc    Create a new Bay inside a Floor
-// @route   POST /api/admin/locations/:locationId/floors/:floorId/bays
-// @access  Private (Admin)
 exports.createBay = async (req, res) => {
   try {
     const { locationId, floorId } = req.params;
-    const { bayNumber, supportedVehicleType, isEVCharging, isAccessible, status } = req.body;
+    const { bayNumber, supportedVehicleType, customHourlyRate, isEVCharging, isAccessible, status, isMaintenance } = req.body;
 
     const bay = await ParkingBay.create({
       location: locationId,
       floor: floorId,
       bayNumber,
       supportedVehicleType: supportedVehicleType || 'car',
+      customHourlyRate: customHourlyRate ? Number(customHourlyRate) : null,
       isEVCharging: Boolean(isEVCharging),
       isAccessible: Boolean(isAccessible),
-      status: status || 'active',
+      status: isMaintenance ? 'maintenance' : status || 'active',
     });
 
     res.status(201).json({ success: true, data: bay });
@@ -220,13 +204,16 @@ exports.createBay = async (req, res) => {
   }
 };
 
-// @desc    Update an individual Bay
-// @route   PUT /api/admin/bays/:bayId
-// @access  Private (Admin)
 exports.updateBay = async (req, res) => {
   try {
     const { bayId } = req.params;
-    const bay = await ParkingBay.findByIdAndUpdate(bayId, req.body, { new: true, runValidators: true });
+    const updateData = { ...req.body };
+
+    if (updateData.isMaintenance !== undefined) {
+      updateData.status = updateData.isMaintenance ? 'maintenance' : 'active';
+    }
+
+    const bay = await ParkingBay.findByIdAndUpdate(bayId, updateData, { new: true, runValidators: true });
     
     if (!bay) {
       return res.status(404).json({ success: false, message: 'Bay slot not found.' });
@@ -238,9 +225,6 @@ exports.updateBay = async (req, res) => {
   }
 };
 
-// @desc    Delete a Bay
-// @route   DELETE /api/admin/bays/:bayId
-// @access  Private (Admin)
 exports.deleteBay = async (req, res) => {
   try {
     const { bayId } = req.params;
@@ -251,7 +235,7 @@ exports.deleteBay = async (req, res) => {
   }
 };
 
-// --- STAFF & BOOKINGS CONTROLLERS ---
+// --- STAFF CONTROLLERS ---
 
 // @desc    Create a new staff account
 // @route   POST /api/admin/staff
@@ -274,7 +258,8 @@ exports.createStaff = async (req, res) => {
       passwordHash: hashedPassword,
       phone,
       role: 'staff',
-      assignedFacility,
+      isActive: true,
+      assignedFacility: assignedFacility || undefined,
     });
 
     res.status(201).json({
@@ -310,13 +295,67 @@ exports.getStaffMembers = async (req, res) => {
   }
 };
 
-// @desc    Assign or Reassign facility to a staff operator
+// @desc    Update Staff Credentials (Email, Phone, Name, Optional Password Reset)
+// @route   PUT /api/admin/staff/:staffId
+// @access  Private (Admin)
+exports.updateStaff = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const { name, email, phone, password } = req.body;
+
+    const staffUser = await User.findById(staffId);
+    if (!staffUser) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    if (email && email !== staffUser.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ success: false, message: 'Email address already in use.' });
+      }
+      staffUser.email = email;
+    }
+
+    if (name) staffUser.name = name;
+    if (phone !== undefined) staffUser.phone = phone;
+
+    if (password && password.trim().length > 0) {
+      const salt = await bcrypt.genSalt(10);
+      staffUser.passwordHash = await bcrypt.hash(password, salt);
+    }
+
+    await staffUser.save();
+
+    const updatedStaff = await User.findById(staffId)
+      .select('-passwordHash')
+      .populate('assignedFacility', 'name address');
+
+    res.status(200).json({
+      success: true,
+      message: 'Staff account updated successfully.',
+      data: updatedStaff,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Assign or Reassign facility to an active staff operator
 // @route   PATCH /api/admin/staff/:staffId/assign
 // @access  Private (Admin)
 exports.assignStaffFacility = async (req, res) => {
   try {
     const { staffId } = req.params;
     const { facilityId } = req.body;
+
+    const targetStaff = await User.findById(staffId);
+    if (!targetStaff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    if (targetStaff.isActive === false) {
+      return res.status(400).json({ success: false, message: 'Cannot assign a facility to a deactivated staff member.' });
+    }
 
     if (facilityId) {
       await User.updateMany(
@@ -333,10 +372,6 @@ exports.assignStaffFacility = async (req, res) => {
       .select('-passwordHash')
       .populate('assignedFacility', 'name address');
 
-    if (!staff) {
-      return res.status(404).json({ success: false, message: 'Staff member not found.' });
-    }
-
     res.status(200).json({
       success: true,
       message: 'Staff facility reassigned successfully.',
@@ -347,26 +382,39 @@ exports.assignStaffFacility = async (req, res) => {
   }
 };
 
-// @desc    Deactivate a staff account
+// @desc    Toggle Activate / Deactivate staff account
 // @route   PATCH /api/admin/staff/:staffId/deactivate
 // @access  Private (Admin)
 exports.deactivateStaff = async (req, res) => {
   try {
     const { staffId } = req.params;
 
-    const staff = await User.findByIdAndUpdate(
-      staffId,
-      { isActive: false, $unset: { assignedFacility: '' } },
-      { new: true }
-    ).select('-passwordHash');
-
-    if (!staff) {
+    const staffUser = await User.findById(staffId);
+    if (!staffUser) {
       return res.status(404).json({ success: false, message: 'Staff member not found.' });
     }
 
+    // Toggle current active state
+    const nextActiveState = staffUser.isActive === false;
+
+    let updatePayload = { isActive: nextActiveState };
+
+    // Automatically unassign facility when deactivating
+    if (!nextActiveState) {
+      updatePayload.$unset = { assignedFacility: '' };
+    }
+
+    const staff = await User.findByIdAndUpdate(
+      staffId,
+      updatePayload,
+      { new: true }
+    )
+      .select('-passwordHash')
+      .populate('assignedFacility', 'name address');
+
     res.status(200).json({
       success: true,
-      message: 'Staff operator deactivated successfully.',
+      message: `Staff operator ${nextActiveState ? 'activated' : 'deactivated'} successfully.`,
       data: staff,
     });
   } catch (error) {

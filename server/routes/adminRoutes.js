@@ -15,6 +15,7 @@ const {
   deleteBay,
   createStaff,
   getStaffMembers,
+  updateStaff,
   assignStaffFacility,
   deactivateStaff,
   getAllBookings,
@@ -44,6 +45,7 @@ router.get('/bookings', getAllBookings);
 // Staff Management endpoints
 router.post('/staff', createStaff);
 router.get('/staff', getStaffMembers);
+router.put('/staff/:staffId', updateStaff);
 router.patch('/staff/:staffId/assign', assignStaffFacility);
 router.patch('/staff/:staffId/deactivate', deactivateStaff);
 

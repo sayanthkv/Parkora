@@ -18,6 +18,7 @@ const sendTokenResponse = (user, statusCode, res) => {
       email: user.email,
       role: user.role,
       phone: user.phone,
+      isActive: user.isActive,
       vehicles: user.vehicles,
       assignedFacility: user.assignedFacility,
     },
@@ -46,6 +47,7 @@ exports.register = async (req, res) => {
       passwordHash: password,
       phone: phone || '',
       role: 'customer',
+      isActive: true,
       vehicles,
     });
 
@@ -76,6 +78,14 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
+    // Prevent deactivated users/staff from logging in
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been deactivated by the administrator. Please contact support.',
+      });
+    }
+
     sendTokenResponse(user, 200, res);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -88,6 +98,9 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user || user.isActive === false) {
+      return res.status(403).json({ success: false, message: 'Account is inactive or does not exist.' });
+    }
     res.status(200).json({ success: true, data: user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

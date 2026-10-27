@@ -52,7 +52,11 @@ const userSchema = new mongoose.Schema(
     assignedFacility: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ParkingLocation',
-      default: null, // Used for staff roles
+      default: null,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
     },
     vehicles: [vehicleSchema],
   },
