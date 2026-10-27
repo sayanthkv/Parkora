@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const ParkingLocation = require('../models/ParkingLocation');
+const Floor = require('../models/Floor');
 const ParkingBay = require('../models/ParkingBay');
 const Booking = require('../models/Booking');
 const bcrypt = require('bcryptjs');
@@ -14,7 +15,6 @@ exports.getAdminMetrics = async (req, res) => {
     const totalBookings = await Booking.countDocuments();
     const activeBookings = await Booking.countDocuments({ status: 'active' });
 
-    // Revenue sum from completed bookings
     const revenueData = await Booking.aggregate([
       { $match: { status: 'completed' } },
       { $group: { _id: null, total: { $sum: '$pricingSnapshot.totalAmount' } } },
@@ -44,7 +44,13 @@ exports.createLocation = async (req, res) => {
   try {
     const locationData = { ...req.body };
 
-    // If Cloudinary file was uploaded via Multer, capture URL
+    if (typeof locationData.amenities === 'string') {
+      locationData.amenities = locationData.amenities
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
     if (req.file) {
       locationData.imageUrl = req.file.path;
     }
@@ -56,14 +62,20 @@ exports.createLocation = async (req, res) => {
   }
 };
 
-// @desc    Update a parking facility (Handles Multer Cloudinary Upload)
+// @desc    Update a parking facility
 // @route   PUT /api/admin/locations/:id
 // @access  Private (Admin)
 exports.updateLocation = async (req, res) => {
   try {
     const updateData = { ...req.body };
 
-    // If a new Cloudinary image file was uploaded via Multer
+    if (typeof updateData.amenities === 'string') {
+      updateData.amenities = updateData.amenities
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
     if (req.file) {
       updateData.imageUrl = req.file.path;
     }
@@ -75,7 +87,7 @@ exports.updateLocation = async (req, res) => {
     );
 
     if (!location) {
-      return res.status(404).json({ success: false, message: 'Parking facility not found.' });
+      return res.status(404).json({ success: false, message: 'Facility not found.' });
     }
 
     res.status(200).json({ success: true, data: location });
@@ -84,7 +96,7 @@ exports.updateLocation = async (req, res) => {
   }
 };
 
-// @desc    Delete a parking facility
+// @desc    Delete a parking facility (Cascades floor and bay removal)
 // @route   DELETE /api/admin/locations/:id
 // @access  Private (Admin)
 exports.deleteLocation = async (req, res) => {
@@ -95,10 +107,14 @@ exports.deleteLocation = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Parking facility not found.' });
     }
 
-    // Unassign staff members attached to this facility
+    // Cascade deletion of attached floors and bays
+    await ParkingBay.deleteMany({ location: req.params.id });
+    await Floor.deleteMany({ location: req.params.id });
+
+    // Unassign staff attached to this facility
     await User.updateMany(
       { assignedFacility: req.params.id },
-      { $unset: { assignedFacility: "" } }
+      { $unset: { assignedFacility: '' } }
     );
 
     res.status(200).json({ success: true, message: 'Parking facility deleted successfully.' });
@@ -107,7 +123,137 @@ exports.deleteLocation = async (req, res) => {
   }
 };
 
-// @desc    Create a new staff account (Hashes Password via bcrypt)
+// --- FLOOR & BAY CONTROLLERS ---
+
+// @desc    Get floors and bays for a facility
+// @route   GET /api/admin/locations/:locationId/structure
+// @access  Private (Admin)
+exports.getLocationStructure = async (req, res) => {
+  try {
+    const { locationId } = req.params;
+    const floors = await Floor.find({ location: locationId }).sort({ level: 1 });
+    const bays = await ParkingBay.find({ location: locationId });
+
+    res.status(200).json({
+      success: true,
+      data: { floors, bays },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create a new Floor for a Facility
+// @route   POST /api/admin/locations/:locationId/floors
+// @access  Private (Admin)
+exports.createFloor = async (req, res) => {
+  try {
+    const { locationId } = req.params;
+    const { name, level, layoutConfig } = req.body;
+
+    const floor = await Floor.create({
+      location: locationId,
+      name,
+      level: Number(level) || 0,
+      layoutConfig: layoutConfig || { totalRows: 4, baysPerRow: 10 },
+    });
+
+    res.status(201).json({ success: true, data: floor });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update a Floor
+// @route   PUT /api/admin/floors/:floorId
+// @access  Private (Admin)
+exports.updateFloor = async (req, res) => {
+  try {
+    const { floorId } = req.params;
+    const floor = await Floor.findByIdAndUpdate(floorId, req.body, { new: true });
+    
+    if (!floor) {
+      return res.status(404).json({ success: false, message: 'Floor not found.' });
+    }
+    
+    res.status(200).json({ success: true, data: floor });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete a Floor and its associated Bays
+// @route   DELETE /api/admin/floors/:floorId
+// @access  Private (Admin)
+exports.deleteFloor = async (req, res) => {
+  try {
+    const { floorId } = req.params;
+    await ParkingBay.deleteMany({ floor: floorId });
+    await Floor.findByIdAndDelete(floorId);
+    res.status(200).json({ success: true, message: 'Floor and associated bays removed.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create a new Bay inside a Floor
+// @route   POST /api/admin/locations/:locationId/floors/:floorId/bays
+// @access  Private (Admin)
+exports.createBay = async (req, res) => {
+  try {
+    const { locationId, floorId } = req.params;
+    const { bayNumber, supportedVehicleType, isEVCharging, isAccessible, status } = req.body;
+
+    const bay = await ParkingBay.create({
+      location: locationId,
+      floor: floorId,
+      bayNumber,
+      supportedVehicleType: supportedVehicleType || 'car',
+      isEVCharging: Boolean(isEVCharging),
+      isAccessible: Boolean(isAccessible),
+      status: status || 'active',
+    });
+
+    res.status(201).json({ success: true, data: bay });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update an individual Bay
+// @route   PUT /api/admin/bays/:bayId
+// @access  Private (Admin)
+exports.updateBay = async (req, res) => {
+  try {
+    const { bayId } = req.params;
+    const bay = await ParkingBay.findByIdAndUpdate(bayId, req.body, { new: true, runValidators: true });
+    
+    if (!bay) {
+      return res.status(404).json({ success: false, message: 'Bay slot not found.' });
+    }
+    
+    res.status(200).json({ success: true, data: bay });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete a Bay
+// @route   DELETE /api/admin/bays/:bayId
+// @access  Private (Admin)
+exports.deleteBay = async (req, res) => {
+  try {
+    const { bayId } = req.params;
+    await ParkingBay.findByIdAndDelete(bayId);
+    res.status(200).json({ success: true, message: 'Bay deleted successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- STAFF & BOOKINGS CONTROLLERS ---
+
+// @desc    Create a new staff account
 // @route   POST /api/admin/staff
 // @access  Private (Admin)
 exports.createStaff = async (req, res) => {
@@ -119,7 +265,6 @@ exports.createStaff = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email already exists.' });
     }
 
-    // Hash the password securely with 10 salt rounds
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -176,7 +321,7 @@ exports.assignStaffFacility = async (req, res) => {
     if (facilityId) {
       await User.updateMany(
         { assignedFacility: facilityId, role: 'staff' },
-        { $unset: { assignedFacility: "" } }
+        { $unset: { assignedFacility: '' } }
       );
     }
 
@@ -211,7 +356,7 @@ exports.deactivateStaff = async (req, res) => {
 
     const staff = await User.findByIdAndUpdate(
       staffId,
-      { isActive: false, $unset: { assignedFacility: "" } },
+      { isActive: false, $unset: { assignedFacility: '' } },
       { new: true }
     ).select('-passwordHash');
 
@@ -241,62 +386,6 @@ exports.getAllBookings = async (req, res) => {
       .sort('-createdAt');
 
     res.status(200).json({ success: true, count: bookings.length, data: bookings });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-// @desc    Create a new parking facility
-exports.createLocation = async (req, res) => {
-  try {
-    const locationData = { ...req.body };
-
-    // Process amenities array if sent as comma-separated string or array
-    if (typeof locationData.amenities === 'string') {
-      locationData.amenities = locationData.amenities
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-
-    if (req.file) {
-      locationData.imageUrl = req.file.path;
-    }
-
-    const location = await ParkingLocation.create(locationData);
-    res.status(201).json({ success: true, data: location });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Update a parking facility
-exports.updateLocation = async (req, res) => {
-  try {
-    const updateData = { ...req.body };
-
-    // Process amenities array if sent as comma-separated string or array
-    if (typeof updateData.amenities === 'string') {
-      updateData.amenities = updateData.amenities
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-
-    if (req.file) {
-      updateData.imageUrl = req.file.path;
-    }
-
-    const location = await ParkingLocation.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-
-    if (!location) {
-      return res.status(404).json({ success: false, message: 'Facility not found.' });
-    }
-
-    res.status(200).json({ success: true, data: location });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

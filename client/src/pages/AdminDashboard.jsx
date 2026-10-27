@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import API from '../api/axios';
 import {
   ShieldCheck, Users, RefreshCw, AlertCircle, CheckCircle2, Search, Building,
-  Image as ImageIcon, UserCheck, UserX, X, Edit, Trash2, PieChart as PieIcon, BarChart3
+  Image as ImageIcon, UserCheck, UserX, X, Edit, Trash2, PieChart as PieIcon, BarChart3,
+  Layers, Plus, Wrench, Zap, Car, Bike, Truck
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
@@ -17,9 +18,25 @@ export default function AdminDashboard() {
   const [bookings, setBookings] = useState([]);
   const [staffList, setStaffList] = useState([]);
 
-  // Modal States
+  // Modals & Drawers State
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [editingFacility, setEditingFacility] = useState(null);
+  const [structureFacility, setStructureFacility] = useState(null); // Facility opened in floor/bay builder
+  const [facilityFloors, setFacilityFloors] = useState([]);
+  const [facilityBays, setFacilityBays] = useState([]);
+  const [activeFloorId, setActiveFloorId] = useState(null);
+
+  // Forms for Floor & Bay Creation
+  const [newFloorName, setNewFloorName] = useState('');
+  const [newFloorLevel, setNewFloorLevel] = useState(0);
+  const [newBay, setNewBay] = useState({
+    bayNumber: '',
+    supportedVehicleType: 'car',
+    customHourlyRate: '',
+    isEVCharging: false,
+    isMaintenance: false,
+  });
+
   const [reassignStaffId, setReassignStaffId] = useState('');
 
   // Form State for Adding New Location
@@ -83,6 +100,109 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchAdminData();
   }, []);
+
+  // Fetch Structure for a specific location
+  const openStructureManager = async (facility) => {
+    setStructureFacility(facility);
+    setLoading(true);
+    try {
+      const res = await API.get(`/admin/locations/${facility._id}/structure`);
+      const fls = res.data.data.floors || [];
+      setFacilityFloors(fls);
+      setFacilityBays(res.data.data.bays || []);
+      if (fls.length > 0) {
+        setActiveFloorId(fls[0]._id);
+      } else {
+        setActiveFloorId(null);
+      }
+    } catch (err) {
+      setError('Failed to fetch facility floor structure.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateFloor = async (e) => {
+    e.preventDefault();
+    if (!structureFacility || !newFloorName.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await API.post(`/admin/locations/${structureFacility._id}/floors`, {
+        name: newFloorName,
+        level: newFloorLevel,
+      });
+      const created = res.data.data;
+      setFacilityFloors((prev) => [...prev, created]);
+      setActiveFloorId(created._id);
+      setNewFloorName('');
+      setNewFloorLevel((prev) => prev + 1);
+      setMessage(`Floor "${created.name}" created.`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to create floor.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteFloor = async (floorId, floorName) => {
+    if (!window.confirm(`Delete "${floorName}" and all bays assigned to it?`)) return;
+    try {
+      await API.delete(`/admin/floors/${floorId}`);
+      setFacilityFloors((prev) => prev.filter((f) => f._id !== floorId));
+      setFacilityBays((prev) => prev.filter((b) => b.floor !== floorId));
+      if (activeFloorId === floorId) {
+        const remaining = facilityFloors.filter((f) => f._id !== floorId);
+        setActiveFloorId(remaining[0]?._id || null);
+      }
+      setMessage(`Floor "${floorName}" deleted.`);
+    } catch (err) {
+      setError('Failed to delete floor.');
+    }
+  };
+
+  const handleCreateBay = async (e) => {
+    e.preventDefault();
+    if (!structureFacility || !activeFloorId || !newBay.bayNumber.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await API.post(
+        `/admin/locations/${structureFacility._id}/floors/${activeFloorId}/bays`,
+        newBay
+      );
+      setFacilityBays((prev) => [...prev, res.data.data]);
+      setNewBay({
+        bayNumber: '',
+        supportedVehicleType: 'car',
+        customHourlyRate: '',
+        isEVCharging: false,
+        isMaintenance: false,
+      });
+      setMessage('New bay slot created successfully.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to create bay slot.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteBay = async (bayId) => {
+    try {
+      await API.delete(`/admin/bays/${bayId}`);
+      setFacilityBays((prev) => prev.filter((b) => b._id !== bayId));
+    } catch (err) {
+      setError('Failed to delete bay slot.');
+    }
+  };
+
+  const handleToggleBayStatus = async (bay, field) => {
+    try {
+      const updatedValue = !bay[field];
+      const res = await API.put(`/admin/bays/${bay._id}`, { [field]: updatedValue });
+      setFacilityBays((prev) => prev.map((b) => (b._id === bay._id ? res.data.data : b)));
+    } catch (err) {
+      setError('Failed to update bay configuration.');
+    }
+  };
 
   const handleImageChange = (e, targetForm = 'new') => {
     const file = e.target.files[0];
@@ -289,6 +409,8 @@ export default function AdminDashboard() {
     return { name: loc.name ? loc.name.replace('Kannur ', '') : 'Facility', revenue };
   });
 
+  const currentFloorBays = facilityBays.filter((b) => b.floor === activeFloorId);
+
   return (
     <div className="min-h-screen bg-white text-slate-900 pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8 font-body">
       
@@ -299,7 +421,7 @@ export default function AdminDashboard() {
             <ShieldCheck className="w-3.5 h-3.5" /> Admin Console
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">Kannur System Control</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">Configure locations, manage staff accounts, and monitor reservation metrics.</p>
+          <p className="text-xs text-slate-500 mt-1 font-medium">Configure locations, manage floor layouts & bays, assign staff, and monitor live metrics.</p>
         </div>
 
         <button
@@ -574,6 +696,17 @@ export default function AdminDashboard() {
                         <span className="font-bold text-[#0B3D2E] bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm">
                           ₹{loc.pricing?.hourlyRate}/hr
                         </span>
+
+                        {/* Layout & Bay Builder Button */}
+                        <button
+                          type="button"
+                          onClick={() => openStructureManager(loc)}
+                          className="px-2.5 py-1.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white rounded-lg font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all"
+                          title="Configure Floors & Bays"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-[#F2B705]" /> Layout
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => setSelectedFacility({ loc, assignedStaff })}
@@ -731,6 +864,222 @@ export default function AdminDashboard() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* FLOOR & BAY STRUCTURE BUILDER MODAL */}
+      {structureFacility && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-4xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative max-h-[92vh] flex flex-col">
+            <button
+              onClick={() => setStructureFacility(null)}
+              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0B3D2E] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                Facility Structure Builder
+              </span>
+              <h3 className="text-xl font-heading font-extrabold text-slate-900 mt-1">{structureFacility.name}</h3>
+              <p className="text-xs text-slate-500 font-medium">Add custom floors and configure individual slot bays with vehicle types and custom hourly rates.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 overflow-hidden">
+              {/* Left Column: Floors List & Add Floor */}
+              <div className="md:col-span-4 border-r border-slate-200 pr-4 flex flex-col space-y-4">
+                <form onSubmit={handleCreateFloor} className="space-y-2 text-xs">
+                  <label className="block font-bold text-slate-700 uppercase text-[10px]">Add Floor Level</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Ground Floor / Level 1"
+                      value={newFloorName}
+                      onChange={(e) => setNewFloorName(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="px-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white rounded-xl font-bold text-xs"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </form>
+
+                <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+                  <label className="block font-bold text-slate-400 uppercase text-[10px]">Configured Floors ({facilityFloors.length})</label>
+                  {facilityFloors.map((fl) => {
+                    const count = facilityBays.filter((b) => b.floor === fl._id).length;
+                    return (
+                      <div
+                        key={fl._id}
+                        onClick={() => setActiveFloorId(fl._id)}
+                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-xs ${
+                          activeFloorId === fl._id
+                            ? 'bg-[#0B3D2E] text-white border-[#0B3D2E] shadow-sm font-bold'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        <div>
+                          <span>{fl.name}</span>
+                          <span className="block text-[10px] opacity-75">{count} Bays configured</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFloor(fl._id, fl.name);
+                          }}
+                          className="p-1 hover:bg-red-500/20 text-slate-400 hover:text-red-500 rounded"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Column: Bays Grid & Add Bay */}
+              <div className="md:col-span-8 flex flex-col space-y-4 overflow-hidden">
+                {activeFloorId ? (
+                  <>
+                    {/* Add Bay Form */}
+                    <form onSubmit={handleCreateBay} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                      <span className="font-bold text-slate-900 block">Add Bay to Active Floor</span>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Bay Code</label>
+                          <input
+                            type="text"
+                            placeholder="G-01"
+                            value={newBay.bayNumber}
+                            onChange={(e) => setNewBay({ ...newBay, bayNumber: e.target.value.toUpperCase() })}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold uppercase text-xs"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Vehicle Type</label>
+                          <select
+                            value={newBay.supportedVehicleType}
+                            onChange={(e) => setNewBay({ ...newBay, supportedVehicleType: e.target.value })}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                          >
+                            <option value="car">Car / SUV</option>
+                            <option value="bike">Two-Wheeler</option>
+                            <option value="ev">EV Vehicle</option>
+                            <option value="heavy">Heavy Vehicle</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Custom Rate (₹/hr)</label>
+                          <input
+                            type="number"
+                            placeholder="Default (₹30)"
+                            value={newBay.customHourlyRate}
+                            onChange={(e) => setNewBay({ ...newBay, customHourlyRate: e.target.value })}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs font-semibold">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newBay.isEVCharging}
+                            onChange={(e) => setNewBay({ ...newBay, isEVCharging: e.target.checked })}
+                            className="rounded accent-[#0B3D2E]"
+                          />
+                          <span>EV Charger Port</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-amber-700">
+                          <input
+                            type="checkbox"
+                            checked={newBay.isMaintenance}
+                            onChange={(e) => setNewBay({ ...newBay, isMaintenance: e.target.checked })}
+                            className="rounded accent-amber-600"
+                          />
+                          <span>Maintenance Lock</span>
+                        </label>
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="ml-auto px-4 py-1.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-lg text-xs cursor-pointer shadow-sm"
+                        >
+                          Save Bay Slot
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Bays List Grid */}
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                      <label className="block font-bold text-slate-400 uppercase text-[10px]">
+                        Configured Bay Slots ({currentFloorBays.length})
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {currentFloorBays.map((bay) => (
+                          <div
+                            key={bay._id}
+                            className={`p-3 rounded-xl border text-xs flex flex-col justify-between space-y-2 ${
+                              bay.isMaintenance
+                                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-heading font-extrabold text-sm">{bay.bayNumber}</span>
+                              <div className="flex items-center gap-1">
+                                {bay.isEVCharging && <Zap className="w-3.5 h-3.5 text-[#F2B705]" />}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteBay(bay._id)}
+                                  className="text-slate-400 hover:text-red-600 p-0.5"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                              <span className="uppercase">{bay.supportedVehicleType}</span>
+                              <span className="text-[#0B3D2E]">
+                                {bay.customHourlyRate ? `₹${bay.customHourlyRate}/hr` : 'Std Rate'}
+                              </span>
+                            </div>
+
+                            <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleBayStatus(bay, 'isMaintenance')}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                                  bay.isMaintenance
+                                    ? 'bg-amber-200 text-amber-900'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                }`}
+                              >
+                                {bay.isMaintenance ? 'Under Maintenance' : 'Active Bay'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-slate-400 font-medium border border-dashed border-slate-200 rounded-2xl p-8">
+                    Select or create a floor on the left panel to start adding bay slots.
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
