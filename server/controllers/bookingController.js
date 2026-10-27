@@ -4,7 +4,7 @@ const Booking = require('../models/Booking');
 const ParkingLocation = require('../models/ParkingLocation');
 const ParkingBay = require('../models/ParkingBay');
 
-// @desc    Create a reservation with atomic bay locking & ACID Concurrency Lock
+// @desc    Create a reservation with quota checks, compatibility validation, atomic bay locking & paise pricing
 // @route   POST /api/bookings
 // @access  Private (Customer)
 exports.createBooking = async (req, res) => {
@@ -25,8 +25,11 @@ exports.createBooking = async (req, res) => {
 
     const reqStart = new Date(startTime);
     const reqEnd = new Date(endTime);
+    const now = new Date();
 
-    // 1. Time & Date Boundary Validations
+    // ---------------------------------------------------------
+    // 1. Time, Date & Abuse Boundary Validations (Flaw 3)
+    // ---------------------------------------------------------
     if (isNaN(reqStart.getTime()) || isNaN(reqEnd.getTime())) {
       await session.abortTransaction();
       session.endSession();
@@ -34,7 +37,7 @@ exports.createBooking = async (req, res) => {
     }
 
     // Disallow past reservation times (with a 60-second buffer for network latency)
-    if (reqStart < new Date(Date.now() - 60000)) {
+    if (reqStart < new Date(now.getTime() - 60000)) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ success: false, message: 'Reservation start time cannot be in the past.' });
@@ -46,7 +49,47 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'End time must be after start time.' });
     }
 
+    // Limit 1: Max advance booking window (e.g., maximum 48 hours in advance)
+    const MAX_ADVANCE_MS = 48 * 60 * 60 * 1000;
+    if (reqStart.getTime() - now.getTime() > MAX_ADVANCE_MS) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'Advance booking limit: Reservations can only be scheduled up to 48 hours in advance.',
+      });
+    }
+
+    // Limit 2: Maximum duration cap per booking (e.g., maximum 24 hours)
+    const MAX_DURATION_MS = 24 * 60 * 60 * 1000;
+    const durationMs = reqEnd.getTime() - reqStart.getTime();
+    if (durationMs > MAX_DURATION_MS) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'Duration limit exceeded: Maximum allowable duration per single reservation is 24 hours.',
+      });
+    }
+
+    // Limit 3: Per-user active booking quota to prevent hoarding
+    const activeUserBookingsCount = await Booking.countDocuments({
+      user: req.user.id,
+      status: { $in: ['confirmed', 'active', 'pending'] },
+    }).session(session);
+
+    if (activeUserBookingsCount >= 2) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(429).json({
+        success: false,
+        message: 'Active quota exceeded: You can only hold up to 2 active or upcoming reservations concurrently.',
+      });
+    }
+
+    // ---------------------------------------------------------
     // 2. Validate Location
+    // ---------------------------------------------------------
     const location = await ParkingLocation.findById(locationId).session(session);
     if (!location || location.isActive === false) {
       await session.abortTransaction();
@@ -54,8 +97,9 @@ exports.createBooking = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Parking facility is inactive or unavailable.' });
     }
 
-    // 3. ATOMIC WRITE LOCK ON PARKING BAY
-    // Updating __v on the bay document forces MongoDB to serialize concurrent transactions on this specific slot.
+    // ---------------------------------------------------------
+    // 3. Atomic Write Lock on Parking Bay
+    // ---------------------------------------------------------
     const bay = await ParkingBay.findOneAndUpdate(
       {
         _id: bayId,
@@ -77,7 +121,22 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // 4. Concurrency Check within Session for overlapping active intervals
+    // ---------------------------------------------------------
+    // 4. Server-Side Vehicle Compatibility Enforcement (Flaw 7)
+    // ---------------------------------------------------------
+    const targetVehicleType = vehicleType || 'car';
+    if (bay.supportedVehicleType && bay.supportedVehicleType !== targetVehicleType) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: `Vehicle mismatch: Bay ${bay.bayNumber} is designated strictly for '${bay.supportedVehicleType}', but requested for '${targetVehicleType}'.`,
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 5. Concurrency Check within Session for Overlapping Intervals
+    // ---------------------------------------------------------
     const existingConflict = await Booking.findOne({
       bay: bayId,
       status: { $in: ['confirmed', 'active', 'pending'] },
@@ -96,20 +155,27 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // 5. Pricing Formula: (Custom Bay Rate OR Location Hourly Rate) x Duration Hours
-    const durationMs = reqEnd.getTime() - reqStart.getTime();
+    // ---------------------------------------------------------
+    // 6. Currency Handling in Integer Paise (Flaw 9)
+    // ---------------------------------------------------------
     const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
-    const hourlyRate = bay.customHourlyRate ?? location.pricing?.hourlyRate ?? 30;
-    const totalAmount = durationHours * hourlyRate;
+    const hourlyRateRupees = bay.customHourlyRate ?? location.pricing?.hourlyRate ?? 30;
+    const baseFeeRupees = location.pricing?.baseRate || 0;
 
-    // 6. Security Identifiers & Tokens
+    const hourlyRatePaise = Math.round(hourlyRateRupees * 100);
+    const baseFeePaise = Math.round(baseFeeRupees * 100);
+    const totalAmountPaise = (durationHours * hourlyRatePaise) + baseFeePaise;
+
+    // ---------------------------------------------------------
+    // 7. Cryptographically Secure QR Token Generation (Flaw 1)
+    // ---------------------------------------------------------
     const bookingRef = `KSP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
-    const qrToken = crypto
-      .createHash('sha256')
-      .update(`${bookingRef}-${req.user.id}-${Date.now()}`)
-      .digest('hex');
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const qrTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
-    // 7. Create booking document inside the transaction
+    // ---------------------------------------------------------
+    // 8. Create Booking Document inside Transaction
+    // ---------------------------------------------------------
     const [booking] = await Booking.create(
       [
         {
@@ -120,19 +186,20 @@ exports.createBooking = async (req, res) => {
           bay: bayId,
           vehicle: {
             regNumber: vehicleRegNumber.toUpperCase().trim(),
-            vehicleType: vehicleType || 'car',
+            vehicleType: targetVehicleType,
           },
           startTime: reqStart,
           endTime: reqEnd,
           status: 'confirmed',
           pricingSnapshot: {
-            hourlyRate,
-            baseFee: location.pricing?.baseRate || 0,
+            hourlyRatePaise,
+            baseFeePaise,
             durationHours,
-            totalAmount,
+            totalAmountPaise,
           },
-          paymentStatus: 'pay_at_facility',
-          qrToken,
+          paymentStatus: 'pending',
+          amountCollectedPaise: 0,
+          qrTokenHash,
         },
       ],
       { session }
@@ -151,7 +218,11 @@ exports.createBooking = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Reservation created successfully',
-      data: populatedBooking,
+      data: {
+        ...populatedBooking.toObject(),
+        // Client uses this composite string to render the physical QR pass
+        qrTicketPayload: `${bookingRef}:${rawToken}`,
+      },
     });
   } catch (error) {
     await session.abortTransaction();
@@ -187,7 +258,7 @@ exports.getMyBookings = async (req, res) => {
     const bookings = await Booking.find({ user: req.user.id })
       .populate('location', 'name address imageUrl')
       .populate('floor', 'name level')
-      .populate('bay', 'bayNumber')
+      .populate('bay', 'bayNumber supportedVehicleType')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);

@@ -6,8 +6,9 @@ const {
   checkOut,
   getTodayOverview,
 } = require('../controllers/staffController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth'); // your auth middleware
 
+// Lock down all staff endpoints to authenticated staff or admin users
 router.use(protect);
 router.use(authorize('staff', 'admin'));
 

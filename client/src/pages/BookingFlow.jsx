@@ -7,7 +7,7 @@ import {
   CheckCircle2, AlertCircle, ShieldCheck, Building
 } from 'lucide-react';
 
-// Helper to get current time string (HH:mm) rounded to the next 15-minute interval
+// Helper to get current time string (HH:mm) rounded to next 15-minute interval
 const getCurrentTimeString = () => {
   const now = new Date();
   const minutes = now.getMinutes();
@@ -70,7 +70,7 @@ export default function BookingFlow() {
     fetchLocationData();
   }, [slug]);
 
-  // Extract supported vehicle types dynamically from location or its floor bays
+  // Extract supported vehicle types dynamically
   const availableVehicleTypes = useMemo(() => {
     if (!location) return [];
 
@@ -94,7 +94,6 @@ export default function BookingFlow() {
     return types;
   }, [location, floors]);
 
-  // Ensure selected vehicleType is valid for the location
   useEffect(() => {
     if (availableVehicleTypes.length > 0 && !availableVehicleTypes.includes(vehicleType)) {
       setVehicleType(availableVehicleTypes[0]);
@@ -103,16 +102,14 @@ export default function BookingFlow() {
 
   const getStartAndEndDates = () => {
     const start = new Date(`${date}T${startTime}`);
-    const end = new Date(start.getTime() + parseInt(durationHours) * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + parseInt(durationHours, 10) * 60 * 60 * 1000);
     return { start, end };
   };
 
-  // Validate if selected start time is in the past
   const isPastTime = useMemo(() => {
     if (!date || !startTime) return false;
     const selectedStart = new Date(`${date}T${startTime}`);
-    const now = new Date();
-    return selectedStart < now;
+    return selectedStart < new Date();
   }, [date, startTime]);
 
   useEffect(() => {
@@ -182,7 +179,17 @@ export default function BookingFlow() {
         endTime: end.toISOString(),
       });
 
-      navigate(`/ticket/${res.data.data.bookingRef}`);
+      const bookingData = res.data.data;
+      const rawPayload = bookingData.qrTicketPayload;
+
+      // Cache raw QR payload into sessionStorage so reload on Ticket view doesn't lose it
+      if (rawPayload) {
+        sessionStorage.setItem(`parkora_qr_${bookingData.bookingRef}`, rawPayload);
+      }
+
+      navigate(`/ticket/${bookingData.bookingRef}`, {
+        state: { qrTicketPayload: rawPayload },
+      });
     } catch (err) {
       if (err.response?.status === 401 || err.response?.data?.message?.includes('token')) {
         setError('Your session has expired. Please log in again to complete your reservation.');
@@ -206,13 +213,16 @@ export default function BookingFlow() {
   if (!location) return <div className="py-28 text-center text-red-600 font-medium bg-white min-h-screen">Location not found.</div>;
 
   const { start, end } = getStartAndEndDates();
-  const calculatedTotal = parseInt(durationHours) * (location.pricing?.hourlyRate || location.price || 30);
+
+  // Price calculations in Indian Rupees (derived from backend rate/custom rate)
+  const hourlyRateRupees = selectedBay?.customHourlyRate ?? (location.pricing?.hourlyRate || location.price || 30);
+  const calculatedTotalRupees = parseInt(durationHours, 10) * hourlyRateRupees;
 
   const vehicleLabels = {
     car: 'Car / SUV',
     bike: 'Two Wheeler',
     ev: 'EV Vehicle',
-    truck: 'Heavy Vehicle / Bus'
+    heavy: 'Heavy Vehicle / Bus'
   };
 
   return (
@@ -306,7 +316,7 @@ export default function BookingFlow() {
                 <option value="4">4 Hours</option>
                 <option value="8">8 Hours</option>
                 <option value="12">12 Hours</option>
-                <option value="24">24 Hours (Full Day)</option>
+                <option value="24">24 Hours (Max Limit)</option>
               </select>
             </div>
 
@@ -482,17 +492,17 @@ export default function BookingFlow() {
             </div>
             <div className="flex justify-between border-b border-slate-200 pb-2.5">
               <span className="text-slate-500 font-medium">Hourly Rate x Duration:</span>
-              <span className="font-semibold text-slate-900">₹{location.pricing?.hourlyRate || location.price || 30} x {durationHours} hrs</span>
+              <span className="font-semibold text-slate-900">₹{hourlyRateRupees} x {durationHours} hrs</span>
             </div>
             <div className="flex justify-between pt-1 text-sm font-extrabold">
               <span className="text-slate-900">Total Payable at Facility:</span>
-              <span className="text-[#0B3D2E] font-heading text-base">₹{calculatedTotal}</span>
+              <span className="text-[#0B3D2E] font-heading text-base">₹{calculatedTotalRupees}</span>
             </div>
           </div>
 
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-xs flex items-center gap-2 font-medium">
             <Info className="w-4 h-4 shrink-0 text-[#0B3D2E]" />
-            Pay-at-Facility Mode: Payment is collected upon vehicle exit by facility staff.
+            Pay-at-Facility Mode: Cash or UPI is collected upon exit by facility staff.
           </div>
 
           <div className="flex gap-3">

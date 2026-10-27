@@ -6,10 +6,16 @@ const parkingEventSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
       required: true,
+      index: true,
+    },
+    location: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ParkingLocation',
+      index: true,
     },
     eventType: {
       type: String,
-      enum: ['CHECK_IN', 'CHECK_OUT', 'QR_SCAN_VERIFIED', 'MANUAL_OVERRIDE'],
+      enum: ['QR_SCAN_VERIFIED', 'CHECK_IN', 'CHECK_OUT', 'PAYMENT_COLLECTED', 'OVERSTAY_FLAGGED'],
       required: true,
     },
     staff: {
@@ -17,7 +23,14 @@ const parkingEventSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    notes: { type: String, default: '' },
+    amountCollectedPaise: {
+      type: Number,
+      default: 0,
+    },
+    notes: {
+      type: String,
+      default: '',
+    },
   },
   { timestamps: true }
 );

@@ -5,6 +5,7 @@ const API = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Allows browser to automatically send and receive httpOnly cookies across domains
 });
 
 API.interceptors.request.use((config) => {
