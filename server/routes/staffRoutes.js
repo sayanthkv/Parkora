@@ -1,20 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const {
+  getStaffShiftContext,
+  autoSwitchToDutyStaff,
+  getTodayOverview,
   verifyTicket,
   checkIn,
   checkOut,
-  getTodayOverview,
 } = require('../controllers/staffController');
-const { protect, authorize } = require('../middleware/auth'); // your auth middleware
+const { protect, authorize } = require('../middleware/auth');
 
-// Lock down all staff endpoints to authenticated staff or admin users
 router.use(protect);
 router.use(authorize('staff', 'admin'));
 
+router.get('/shift-context', getStaffShiftContext);
+router.post('/auto-switch-duty', autoSwitchToDutyStaff);
+router.get('/today', getTodayOverview);
 router.post('/verify', verifyTicket);
 router.post('/check-in/:bookingId', checkIn);
 router.post('/check-out/:bookingId', checkOut);
-router.get('/today', getTodayOverview);
 
 module.exports = router;

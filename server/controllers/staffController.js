@@ -1,303 +1,291 @@
-const crypto = require('crypto');
 const Booking = require('../models/Booking');
-const ParkingEvent = require('../models/ParkingEvent');
+const ParkingLocation = require('../models/ParkingLocation');
+const User = require('../models/User');
+const StaffActivityLog = require('../models/StaffActivityLog');
+const { getActiveShiftDetails } = require('../utils/shiftHelper');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
-// Helper to enforce staff facility scoping
-const enforceFacilityScope = (user, bookingLocationId) => {
-  if (user.role === 'admin') return true;
-  if (!user.assignedFacility) return false;
-  return user.assignedFacility.toString() === bookingLocationId.toString();
-};
-
-// @desc    Verify QR token payload or manual booking reference
-// @route   POST /api/staff/verify
-// @access  Private (Staff/Admin)
-exports.verifyTicket = async (req, res) => {
+// @desc    Get on-duty staff information for the facility & auto-log attendance
+// @route   GET /api/staff/shift-context
+// @access  Private (Staff)
+exports.getStaffShiftContext = async (req, res) => {
   try {
-    const { qrTicketPayload, bookingRef } = req.body;
+    const currentStaff = await User.findById(req.user.id).populate('assignedFacility');
+    if (!currentStaff || !currentStaff.assignedFacility) {
+      return res.status(400).json({ success: false, message: 'Staff account has no assigned facility.' });
+    }
 
-    if (!qrTicketPayload && !bookingRef) {
-      return res.status(400).json({
-        success: false,
-        message: 'Provide either a qrTicketPayload (scanned QR) or bookingRef to verify.',
+    const facility = currentStaff.assignedFacility;
+    const shiftInfo = getActiveShiftDetails(facility.name);
+
+    // Find the staff designated for this facility's current active shift
+    const onDutyStaff = await User.findOne({
+      assignedFacility: facility._id,
+      shiftSlot: shiftInfo.activeSlot,
+      isActive: true,
+    }).select('-passwordHash');
+
+    // Auto-record login activity if current logged-in user matches active slot
+    if (currentStaff.shiftSlot === shiftInfo.activeSlot) {
+      const recentLog = await StaffActivityLog.findOne({
+        staff: currentStaff._id,
+        facility: facility._id,
+        actionType: 'shift_start_login',
+        timestamp: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // logged within last 30m
       });
-    }
 
-    let targetRef = bookingRef ? bookingRef.toUpperCase().trim() : null;
-    let rawToken = null;
-
-    if (qrTicketPayload) {
-      if (!qrTicketPayload.includes(':')) {
-        return res.status(400).json({ success: false, isValid: false, message: 'Malformed QR pass format.' });
-      }
-      const parts = qrTicketPayload.split(':');
-      targetRef = parts[0].toUpperCase().trim();
-      rawToken = parts[1];
-    }
-
-    // Select +qrTokenHash to enable cryptographic comparison
-    const booking = await Booking.findOne({ bookingRef: targetRef })
-      .select('+qrTokenHash')
-      .populate('location', 'name address')
-      .populate('floor', 'name level')
-      .populate('bay', 'bayNumber supportedVehicleType customHourlyRate')
-      .populate('user', 'name email phone');
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        isValid: false,
-        message: 'Invalid ticket: Booking not found.',
-      });
-    }
-
-    // Cryptographic validation if QR scan was provided (Flaw 1)
-    if (rawToken) {
-      const candidateHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-      const tokenBuffer = Buffer.from(booking.qrTokenHash, 'hex');
-      const candidateBuffer = Buffer.from(candidateHash, 'hex');
-
-      if (
-        tokenBuffer.length !== candidateBuffer.length ||
-        !crypto.timingSafeEqual(tokenBuffer, candidateBuffer)
-      ) {
-        return res.status(401).json({
-          success: false,
-          isValid: false,
-          message: 'Counterfeit or tampered QR ticket detected.',
+      if (!recentLog) {
+        await StaffActivityLog.create({
+          staff: currentStaff._id,
+          facility: facility._id,
+          actionType: 'shift_start_login',
+          shiftSlot: shiftInfo.activeSlot,
+          details: `Automatic session initialization for ${shiftInfo.label}`,
         });
       }
     }
 
-    // Facility Scope Guard (Flaw 6)
-    if (!enforceFacilityScope(req.user, booking.location._id)) {
-      return res.status(403).json({
-        success: false,
-        isValid: false,
-        message: 'Unauthorized: This ticket belongs to a different parking facility.',
-      });
-    }
-
-    const now = new Date();
-    let isValid = true;
-    let message = 'Ticket is valid for check-in.';
-
-    // Check-in Time Window (allow entry 15 mins before start time)
-    const earlyCheckInWindow = new Date(booking.startTime.getTime() - 15 * 60 * 1000);
-
-    if (booking.status === 'cancelled') {
-      isValid = false;
-      message = 'This booking was cancelled.';
-    } else if (booking.status === 'no_show') {
-      isValid = false;
-      message = 'This booking was marked as a No-Show.';
-    } else if (booking.status === 'completed') {
-      isValid = false;
-      message = 'This booking session has already been completed.';
-    } else if (booking.status === 'active') {
-      message = 'Vehicle is currently parked (Checked In). Ready for Check-Out.';
-    } else if (now < earlyCheckInWindow) {
-      isValid = false;
-      message = `Too early: Check-in opens 15 minutes before start time (${booking.startTime.toLocaleTimeString()}).`;
-    } else if (now > booking.endTime) {
-      isValid = false;
-      message = 'This booking interval has already expired.';
-    }
-
-    // Audit Event
-    await ParkingEvent.create({
-      booking: booking._id,
-      location: booking.location._id,
-      eventType: 'QR_SCAN_VERIFIED',
-      staff: req.user.id,
-      notes: `Verification performed via ${qrTicketPayload ? 'QR scan' : 'manual lookup'}. Status: ${booking.status}`,
-    });
-
-    // Remove qrTokenHash before sending response
-    booking.qrTokenHash = undefined;
-
     res.status(200).json({
       success: true,
-      isValid,
-      message,
-      data: booking,
+      data: {
+        facility,
+        shiftInfo,
+        currentStaff,
+        onDutyStaff,
+        isOnDuty: currentStaff.shiftSlot === shiftInfo.activeSlot,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Process vehicle check-in
-// @route   POST /api/staff/check-in/:bookingId
-// @access  Private (Staff/Admin)
-exports.checkIn = async (req, res) => {
+// @desc    Switch to the on-duty staff member automatically (project presentation helper)
+// @route   POST /api/staff/auto-switch-duty
+// @access  Private (Staff, Admin)
+exports.autoSwitchToDutyStaff = async (req, res) => {
   try {
-    const { bookingId } = req.params;
-
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    const currentStaff = await User.findById(req.user.id);
+    if (!currentStaff || !currentStaff.assignedFacility) {
+      return res.status(400).json({ success: false, message: 'No facility assigned.' });
     }
 
-    // Enforce Facility Scoping
-    if (!enforceFacilityScope(req.user, booking.location)) {
-      return res.status(403).json({
+    const facility = await ParkingLocation.findById(currentStaff.assignedFacility);
+    const shiftInfo = getActiveShiftDetails(facility.name);
+
+    if (!shiftInfo.activeSlot) {
+      return res.status(400).json({ success: false, message: 'Facility is currently outside operating hours.' });
+    }
+
+    const activeStaff = await User.findOne({
+      assignedFacility: facility._id,
+      shiftSlot: shiftInfo.activeSlot,
+      isActive: true,
+    });
+
+    if (!activeStaff) {
+      return res.status(404).json({
         success: false,
-        message: 'Unauthorized: You cannot check in vehicles for another parking facility.',
+        message: `No active staff member assigned to ${shiftInfo.activeSlot.toUpperCase()} for this facility.`,
       });
     }
 
-    if (booking.status === 'active') {
-      return res.status(400).json({ success: false, message: 'Vehicle is already checked in.' });
-    }
+    // Generate fresh JWT token for on-duty staff
+    const token = jwt.sign(
+      { id: activeStaff._id, role: activeStaff.role },
+      process.env.JWT_SECRET || 'secret_jwt_key',
+      { expiresIn: '12h' }
+    );
 
-    if (booking.status !== 'confirmed') {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot check in booking in '${booking.status}' status.`,
-      });
-    }
-
-    const now = new Date();
-    const earlyCheckInWindow = new Date(booking.startTime.getTime() - 15 * 60 * 1000);
-
-    if (now < earlyCheckInWindow) {
-      return res.status(400).json({
-        success: false,
-        message: 'Too early: Check-in opens 15 minutes before the scheduled start time.',
-      });
-    }
-
-    if (now > booking.endTime) {
-      return res.status(400).json({
-        success: false,
-        message: 'This booking duration has expired. Handle as walk-in.',
-      });
-    }
-
-    booking.status = 'active';
-    booking.checkInTime = now;
-    booking.checkedInBy = req.user.id;
-    await booking.save();
-
-    await ParkingEvent.create({
-      booking: booking._id,
-      location: booking.location,
-      eventType: 'CHECK_IN',
-      staff: req.user.id,
-      notes: `Vehicle ${booking.vehicle.regNumber} checked in.`,
+    // Record automatic transition log
+    await StaffActivityLog.create({
+      staff: activeStaff._id,
+      facility: facility._id,
+      actionType: 'shift_start_login',
+      shiftSlot: shiftInfo.activeSlot,
+      details: `Shift auto-rotation handover to ${activeStaff.name}`,
     });
 
     res.status(200).json({
       success: true,
-      message: 'Check-in recorded successfully.',
-      data: booking,
+      message: `Shift handover successful. Switched to ${activeStaff.name}.`,
+      token,
+      data: {
+        _id: activeStaff._id,
+        name: activeStaff.name,
+        email: activeStaff.email,
+        role: activeStaff.role,
+        shiftSlot: activeStaff.shiftSlot,
+        assignedFacility: facility,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Process vehicle check-out & collect payment
-// @route   POST /api/staff/check-out/:bookingId
-// @access  Private (Staff/Admin)
-exports.checkOut = async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found.' });
-    }
-
-    // Enforce Facility Scoping
-    if (!enforceFacilityScope(req.user, booking.location)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Unauthorized: You cannot check out vehicles for another parking facility.',
-      });
-    }
-
-    if (booking.status !== 'active') {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot check out booking with status '${booking.status}'. Vehicle must be active.`,
-      });
-    }
-
-    const now = new Date();
-    booking.status = 'completed';
-    booking.checkOutTime = now;
-    booking.checkedOutBy = req.user.id;
-
-    // Collect payment in paise (Flaw 5 & 9)
-    booking.paymentStatus = 'paid';
-    booking.amountCollectedPaise = booking.pricingSnapshot.totalAmountPaise;
-
-    await booking.save();
-
-    await ParkingEvent.create({
-      booking: booking._id,
-      location: booking.location,
-      eventType: 'CHECK_OUT',
-      staff: req.user.id,
-      amountCollectedPaise: booking.amountCollectedPaise,
-      notes: `Vehicle ${booking.vehicle.regNumber} checked out. Amount collected: ₹${booking.amountCollectedPaise / 100}`,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Check-out completed and payment collected successfully.',
-      data: booking,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get current facility's active sessions & today's arrivals
+// @desc    Today's facility stats
 // @route   GET /api/staff/today
-// @access  Private (Staff/Admin)
+// @access  Private (Staff)
 exports.getTodayOverview = async (req, res) => {
   try {
-    const facilityId = req.user.assignedFacility;
-    
-    if (req.user.role === 'staff' && !facilityId) {
-      return res.status(403).json({ success: false, message: 'No facility assigned to your staff account.' });
+    const staff = await User.findById(req.user.id);
+    if (!staff.assignedFacility) {
+      return res.status(400).json({ success: false, message: 'Staff has no assigned facility.' });
     }
 
-    const filter = facilityId ? { location: facilityId } : {};
+    const activeCount = await Booking.countDocuments({
+      location: staff.assignedFacility,
+      status: 'active',
+    });
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const todaysArrivalsCount = await Booking.countDocuments({
+      location: staff.assignedFacility,
+      startTime: { $gte: startOfToday },
+    });
 
     const activeSessions = await Booking.find({
-      ...filter,
+      location: staff.assignedFacility,
       status: 'active',
     })
-      .populate('bay', 'bayNumber supportedVehicleType')
-      .populate('user', 'name phone');
-
-    const todaysArrivals = await Booking.find({
-      ...filter,
-      startTime: { $gte: startOfDay, $lte: endOfDay },
-    })
-      .populate('bay', 'bayNumber supportedVehicleType')
-      .populate('user', 'name phone')
-      .sort('startTime');
+      .populate('bay', 'bayNumber')
+      .populate('floor', 'name')
+      .lean();
 
     res.status(200).json({
       success: true,
       data: {
-        activeCount: activeSessions.length,
-        todaysArrivalsCount: todaysArrivals.length,
+        activeCount,
+        todaysArrivalsCount,
         activeSessions,
-        todaysArrivals,
       },
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Verify QR token or Booking Reference
+// @route   POST /api/staff/verify
+// @access  Private (Staff)
+exports.verifyTicket = async (req, res) => {
+  try {
+    const { bookingRef, qrToken } = req.body;
+    let booking = null;
+
+    if (bookingRef) {
+      booking = await Booking.findOne({ bookingRef })
+        .populate('location', 'name')
+        .populate('floor', 'name')
+        .populate('bay', 'bayNumber');
+    } else if (qrToken && qrToken.includes(':')) {
+      const [tokenRef, rawSecret] = qrToken.split(':');
+      const expectedHash = crypto.createHash('sha256').update(rawSecret).digest('hex');
+
+      booking = await Booking.findOne({ bookingRef: tokenRef })
+        .populate('location', 'name')
+        .populate('floor', 'name')
+        .populate('bay', 'bayNumber');
+
+      if (booking) {
+        const storedHashBuf = Buffer.from(booking.qrTokenHash || '', 'utf8');
+        const calcHashBuf = Buffer.from(expectedHash, 'utf8');
+
+        if (
+          storedHashBuf.length !== calcHashBuf.length ||
+          !crypto.timingSafeEqual(storedHashBuf, calcHashBuf)
+        ) {
+          return res.status(400).json({ success: false, isValid: false, message: 'Cryptographic QR token mismatch.' });
+        }
+      }
+    }
+
+    if (!booking) {
+      return res.status(404).json({ success: false, isValid: false, message: 'Reservation not found.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      isValid: true,
+      message: 'Ticket successfully verified.',
+      data: booking,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Check-In vehicle
+// @route   POST /api/staff/check-in/:bookingId
+// @access  Private (Staff)
+exports.checkIn = async (req, res) => {
+  try {
+    const staff = await User.findById(req.user.id);
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    if (booking.status !== 'confirmed') {
+      return res.status(400).json({ success: false, message: `Cannot check in a booking with status '${booking.status}'.` });
+    }
+
+    booking.status = 'active';
+    booking.actualCheckInTime = new Date();
+    await booking.save();
+
+    // Log check-in action
+    await StaffActivityLog.create({
+      staff: staff._id,
+      facility: booking.location,
+      actionType: 'qr_check_in',
+      shiftSlot: staff.shiftSlot || 'shift_1',
+      details: `Vehicle ${booking.vehicle?.regNumber} checked into Bay ${booking.bay}`,
+    });
+
+    res.status(200).json({ success: true, message: 'Vehicle checked in successfully.', data: booking });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Check-Out vehicle
+// @route   POST /api/staff/check-out/:bookingId
+// @access  Private (Staff)
+exports.checkOut = async (req, res) => {
+  try {
+    const staff = await User.findById(req.user.id);
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    if (booking.status !== 'active') {
+      return res.status(400).json({ success: false, message: `Cannot check out booking with status '${booking.status}'.` });
+    }
+
+    booking.status = 'completed';
+    booking.actualCheckOutTime = new Date();
+    booking.paymentStatus = 'paid';
+    booking.amountCollectedPaise = booking.pricingSnapshot?.totalAmountPaise || 4000;
+    await booking.save();
+
+    // Log check-out action
+    await StaffActivityLog.create({
+      staff: staff._id,
+      facility: booking.location,
+      actionType: 'vehicle_checkout',
+      shiftSlot: staff.shiftSlot || 'shift_1',
+      details: `Vehicle ${booking.vehicle?.regNumber} checked out. Fee finalized.`,
+    });
+
+    res.status(200).json({ success: true, message: 'Vehicle checked out and payment recorded.', data: booking });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

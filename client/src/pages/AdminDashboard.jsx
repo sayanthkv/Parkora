@@ -3,7 +3,7 @@ import API from '../api/axios';
 import {
   ShieldCheck, Users, RefreshCw, AlertCircle, CheckCircle2, Search, Building,
   Image as ImageIcon, UserCheck, UserX, X, Edit, Trash2, PieChart as PieIcon, BarChart3,
-  Layers, Plus, Zap, Mail, Phone, User, Calendar, Clock, CreditCard, Banknote
+  Layers, Plus, Zap, Mail, Phone, User, Calendar, Clock, Banknote, ShieldAlert, Activity
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
@@ -17,9 +17,14 @@ export default function AdminDashboard() {
   const [locations, setLocations] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [staffList, setStaffList] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
 
-  // Modals & Drawers State
-  const [selectedFacility, setSelectedFacility] = useState(null);
+  // Shift & Facility Assignment Modal
+  const [assigningShiftFacility, setAssigningShiftFacility] = useState(null);
+  const [shift1StaffId, setShift1StaffId] = useState('');
+  const [shift2StaffId, setShift2StaffId] = useState('');
+
+  // Modals & Structure States
   const [editingFacility, setEditingFacility] = useState(null);
   const [structureFacility, setStructureFacility] = useState(null);
   const [viewingStaff, setViewingStaff] = useState(null);
@@ -29,7 +34,6 @@ export default function AdminDashboard() {
   const [facilityBays, setFacilityBays] = useState([]);
   const [activeFloorId, setActiveFloorId] = useState(null);
 
-  // Forms for Floor & Bay Creation
   const [newFloorName, setNewFloorName] = useState('');
   const [newFloorLevel, setNewFloorLevel] = useState(0);
   const [newBay, setNewBay] = useState({
@@ -40,40 +44,16 @@ export default function AdminDashboard() {
     isMaintenance: false,
   });
 
-  const [reassignStaffId, setReassignStaffId] = useState('');
-
-  // Form State for Staff Editing
-  const [staffForm, setStaffForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    password: '',
-  });
-
-  // Form State for Adding New Location
+  const [staffForm, setStaffForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [newLocation, setNewLocation] = useState({
-    name: '',
-    slug: '',
-    description: '',
-    amenities: '24/7 Access, CCTV, Covered Parking',
-    street: '',
-    area: '',
-    hourlyRate: 30,
-    baseRate: 20,
-    lat: 11.8689,
-    lng: 75.3725,
-    imageUrl: '',
+    name: '', slug: '', description: '', amenities: '24/7 Access, CCTV, Covered Parking',
+    street: '', area: '', hourlyRate: 30, baseRate: 20, lat: 11.8689, lng: 75.3725, imageUrl: '',
   });
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [editSelectedFile, setEditSelectedFile] = useState(null);
-
   const [newStaff, setNewStaff] = useState({
-    name: '',
-    email: '',
-    password: '',
-    phone: '',
-    assignedFacility: '',
+    name: '', email: '', password: '', phone: '', assignedFacility: '', shiftSlot: 'shift_1',
   });
 
   const [loading, setLoading] = useState(true);
@@ -81,32 +61,27 @@ export default function AdminDashboard() {
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
 
-  // Master Bookings Filters
   const [bookingFilter, setBookingFilter] = useState('');
   const [selectedDateFilter, setSelectedDateFilter] = useState('');
 
-  // Filter staff list to only show active operators for assigning tasks
-  const activeStaffList = staffList.filter((s) => s.isActive !== false);
+  const activeStaffList = useMemo(() => staffList.filter((s) => s.isActive !== false), [staffList]);
 
   const fetchAdminData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [mRes, lRes, bRes, sRes] = await Promise.all([
+      const [mRes, lRes, bRes, sRes, actRes] = await Promise.all([
         API.get('/admin/metrics'),
-        API.get('/locations'),
+        API.get('/admin/locations-shifts'),
         API.get('/admin/bookings'),
         API.get('/admin/staff'),
+        API.get('/admin/staff-activity'),
       ]);
       setMetrics(mRes.data.data);
-      setLocations(lRes.data.data || lRes.data || []);
+      setLocations(lRes.data.data || []);
       setBookings(bRes.data.data || []);
       setStaffList(sRes.data.data || []);
-
-      const fetchedLocations = lRes.data.data || lRes.data || [];
-      if (fetchedLocations.length > 0 && !newStaff.assignedFacility) {
-        setNewStaff((prev) => ({ ...prev, assignedFacility: fetchedLocations[0]._id }));
-      }
+      setActivityLogs(actRes.data.data || []);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch admin dashboard records.');
     } finally {
@@ -118,26 +93,57 @@ export default function AdminDashboard() {
     fetchAdminData();
   }, []);
 
+  const openShiftAssignModal = (facility) => {
+    setAssigningShiftFacility(facility);
+    setShift1StaffId(facility.shift1Staff?._id || '');
+    setShift2StaffId(facility.shift2Staff?._id || '');
+  };
+
+  const handleSaveShiftAssignment = async (e) => {
+    e.preventDefault();
+    if (!assigningShiftFacility) return;
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      // Assign Shift 1 operator
+      if (shift1StaffId) {
+        await API.patch(`/admin/staff/${shift1StaffId}/assign-shift`, {
+          facilityId: assigningShiftFacility._id,
+          shiftSlot: 'shift_1',
+        });
+      }
+
+      // Assign Shift 2 operator
+      if (shift2StaffId) {
+        await API.patch(`/admin/staff/${shift2StaffId}/assign-shift`, {
+          facilityId: assigningShiftFacility._id,
+          shiftSlot: 'shift_2',
+        });
+      }
+
+      setMessage(`Dual shifts updated for ${assigningShiftFacility.name}.`);
+      setAssigningShiftFacility(null);
+      fetchAdminData();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to assign shifts.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const openStructureManager = async (facility) => {
     setStructureFacility(facility);
     setLoading(true);
-
-    const defaultRate = facility.pricing?.hourlyRate ?? facility.hourlyRate ?? 30;
-    setNewBay((prev) => ({
-      ...prev,
-      customHourlyRate: defaultRate,
-    }));
+    const defaultRate = facility.pricing?.hourlyRate ?? 30;
+    setNewBay((prev) => ({ ...prev, customHourlyRate: defaultRate }));
 
     try {
       const res = await API.get(`/admin/locations/${facility._id}/structure`);
       const fls = res.data.data.floors || [];
       setFacilityFloors(fls);
       setFacilityBays(res.data.data.bays || []);
-      if (fls.length > 0) {
-        setActiveFloorId(fls[0]._id);
-      } else {
-        setActiveFloorId(null);
-      }
+      setActiveFloorId(fls[0]?._id || null);
     } catch (err) {
       setError('Failed to fetch facility floor structure.');
     } finally {
@@ -154,12 +160,11 @@ export default function AdminDashboard() {
         name: newFloorName,
         level: newFloorLevel,
       });
-      const created = res.data.data;
-      setFacilityFloors((prev) => [...prev, created]);
-      setActiveFloorId(created._id);
+      setFacilityFloors((prev) => [...prev, res.data.data]);
+      setActiveFloorId(res.data.data._id);
       setNewFloorName('');
       setNewFloorLevel((prev) => prev + 1);
-      setMessage(`Floor "${created.name}" created.`);
+      setMessage(`Floor "${res.data.data.name}" created.`);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create floor.');
     } finally {
@@ -173,10 +178,6 @@ export default function AdminDashboard() {
       await API.delete(`/admin/floors/${floorId}`);
       setFacilityFloors((prev) => prev.filter((f) => f._id !== floorId));
       setFacilityBays((prev) => prev.filter((b) => b.floor !== floorId));
-      if (activeFloorId === floorId) {
-        const remaining = facilityFloors.filter((f) => f._id !== floorId);
-        setActiveFloorId(remaining[0]?._id || null);
-      }
       setMessage(`Floor "${floorName}" deleted.`);
     } catch (err) {
       setError('Failed to delete floor.');
@@ -187,8 +188,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!structureFacility || !activeFloorId || !newBay.bayNumber.trim()) return;
     setSubmitting(true);
-
-    const defaultRate = structureFacility.pricing?.hourlyRate ?? structureFacility.hourlyRate ?? 30;
+    const defaultRate = structureFacility.pricing?.hourlyRate ?? 30;
 
     try {
       const res = await API.post(
@@ -206,9 +206,9 @@ export default function AdminDashboard() {
         isEVCharging: false,
         isMaintenance: false,
       });
-      setMessage('New bay slot created successfully.');
+      setMessage('Bay slot created successfully.');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create bay slot.');
+      setError(err.response?.data?.message || 'Failed to create bay.');
     } finally {
       setSubmitting(false);
     }
@@ -219,7 +219,7 @@ export default function AdminDashboard() {
       await API.delete(`/admin/bays/${bayId}`);
       setFacilityBays((prev) => prev.filter((b) => b._id !== bayId));
     } catch (err) {
-      setError('Failed to delete bay slot.');
+      setError('Failed to delete bay.');
     }
   };
 
@@ -229,28 +229,7 @@ export default function AdminDashboard() {
       const res = await API.put(`/admin/bays/${bay._id}`, { [field]: updatedValue });
       setFacilityBays((prev) => prev.map((b) => (b._id === bay._id ? res.data.data : b)));
     } catch (err) {
-      setError('Failed to update bay configuration.');
-    }
-  };
-
-  const handleImageChange = (e, targetForm = 'new') => {
-    const file = e.target.files[0];
-    if (file) {
-      if (targetForm === 'new') {
-        setSelectedFile(file);
-      } else {
-        setEditSelectedFile(file);
-      }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (targetForm === 'new') {
-          setNewLocation((prev) => ({ ...prev, imageUrl: reader.result }));
-        } else {
-          setEditingFacility((prev) => ({ ...prev, imageUrl: reader.result }));
-        }
-      };
-      reader.readAsDataURL(file);
+      setError('Failed to update bay.');
     }
   };
 
@@ -275,90 +254,18 @@ export default function AdminDashboard() {
       formData.append('coordinates[lat]', Number(newLocation.lat));
       formData.append('coordinates[lng]', Number(newLocation.lng));
 
-      if (selectedFile) {
-        formData.append('imageUrl', selectedFile);
-      }
+      if (selectedFile) formData.append('imageUrl', selectedFile);
 
-      await API.post('/admin/locations', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
+      await API.post('/admin/locations', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMessage('New parking facility created successfully.');
       setSelectedFile(null);
       setNewLocation({
-        name: '',
-        slug: '',
-        description: '',
-        amenities: '24/7 Access, CCTV, Covered Parking',
-        street: '',
-        area: '',
-        hourlyRate: 30,
-        baseRate: 20,
-        lat: 11.8689,
-        lng: 75.3725,
-        imageUrl: '',
+        name: '', slug: '', description: '', amenities: '24/7 Access, CCTV, Covered Parking',
+        street: '', area: '', hourlyRate: 30, baseRate: 20, lat: 11.8689, lng: 75.3725, imageUrl: '',
       });
       fetchAdminData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create facility.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUpdateLocation = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('name', editingFacility.name);
-      formData.append('description', editingFacility.description || '');
-      
-      const amenitiesVal = Array.isArray(editingFacility.amenities)
-        ? editingFacility.amenities.join(', ')
-        : editingFacility.amenities || '';
-      formData.append('amenities', amenitiesVal);
-
-      formData.append('address[street]', editingFacility.address?.street || editingFacility.street || '');
-      formData.append('address[area]', editingFacility.address?.area || editingFacility.area || '');
-      formData.append('address[city]', 'Kannur');
-      formData.append('address[state]', 'Kerala');
-      formData.append('pricing[hourlyRate]', Number(editingFacility.pricing?.hourlyRate ?? editingFacility.hourlyRate));
-      formData.append('pricing[baseRate]', Number(editingFacility.pricing?.baseRate ?? editingFacility.baseRate));
-
-      if (editSelectedFile) {
-        formData.append('imageUrl', editSelectedFile);
-      }
-
-      await API.put(`/admin/locations/${editingFacility._id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      setMessage('Facility updated successfully.');
-      setEditSelectedFile(null);
-      setEditingFacility(null);
-      fetchAdminData();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update facility.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteLocation = async (facilityId, facilityName) => {
-    if (!window.confirm(`Are you sure you want to permanently delete "${facilityName}"?`)) return;
-
-    setSubmitting(true);
-    setError(null);
-    try {
-      await API.delete(`/admin/locations/${facilityId}`);
-      setMessage(`Facility "${facilityName}" deleted successfully.`);
-      fetchAdminData();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete facility.');
     } finally {
       setSubmitting(false);
     }
@@ -372,8 +279,8 @@ export default function AdminDashboard() {
 
     try {
       await API.post('/admin/staff', newStaff);
-      setMessage('Staff operator account created successfully.');
-      setNewStaff({ name: '', email: '', password: '', phone: '', assignedFacility: locations[0]?._id || '' });
+      setMessage('Staff operator account created.');
+      setNewStaff({ name: '', email: '', password: '', phone: '', assignedFacility: locations[0]?._id || '', shiftSlot: 'shift_1' });
       fetchAdminData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create staff account.');
@@ -382,90 +289,23 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUpdateStaff = async (e) => {
-    e.preventDefault();
-    if (!editingStaff) return;
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      const res = await API.put(`/admin/staff/${editingStaff._id}`, staffForm);
-      const updatedStaff = res.data.data;
-      
-      setStaffList((prev) => prev.map((s) => (s._id === updatedStaff._id ? updatedStaff : s)));
-      setMessage(`Staff account for ${staffForm.name} updated successfully.`);
-      setEditingStaff(null);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update staff credentials.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleReassignStaff = async (staffId, facilityId) => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      await API.patch(`/admin/staff/${staffId}/assign`, { facilityId });
-      setMessage('Staff reassigned successfully.');
-      setSelectedFacility(null);
-      fetchAdminData();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reassign staff member.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleToggleStaffStatus = async (staff) => {
     const isDeactivating = staff.isActive !== false;
     const actionText = isDeactivating ? 'deactivate and unassign' : 'reactivate';
-
     if (!window.confirm(`Are you sure you want to ${actionText} "${staff.name}"?`)) return;
 
     setSubmitting(true);
-    setError(null);
     try {
       const res = await API.patch(`/admin/staff/${staff._id}/deactivate`);
-      const updatedStaff = res.data.data;
-
-      setStaffList((prev) =>
-        prev.map((s) => (s._id === staff._id ? updatedStaff : s))
-      );
-
-      if (viewingStaff?._id === staff._id) {
-        setViewingStaff(updatedStaff);
-      }
-
-      setMessage(
-        `Staff account for ${staff.name} ${
-          updatedStaff.isActive ? 'activated' : 'deactivated & unassigned'
-        }.`
-      );
+      setStaffList((prev) => prev.map((s) => (s._id === staff._id ? res.data.data : s)));
+      setMessage(`Staff account for ${staff.name} updated.`);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to change staff activation status.');
+      setError('Failed to update staff status.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const openEditStaffModal = (staff) => {
-    setEditingStaff(staff);
-    setStaffForm({
-      name: staff.name || '',
-      email: staff.email || '',
-      phone: staff.phone || '',
-      password: '',
-    });
-  };
-
-  const handleRedirectToStaffDetails = (staffMember) => {
-    setSelectedFacility(null);
-    setActiveTab('staff');
-    setViewingStaff(staffMember);
-  };
-
-  // Helper to safely format amounts from integer paise or legacy Rupees[cite: 16, 18]
   const getDisplayAmount = (b) => {
     if (b.paymentStatus === 'paid' && typeof b.amountCollectedPaise === 'number' && b.amountCollectedPaise > 0) {
       return b.amountCollectedPaise / 100;
@@ -476,24 +316,12 @@ export default function AdminDashboard() {
     return b.pricingSnapshot?.totalAmount || 0;
   };
 
-  // Date parsing helper to format clean group keys (YYYY-MM-DD)
   const getDateKey = (dateStr) => {
     if (!dateStr) return 'Unscheduled';
     const d = new Date(dateStr);
     return isNaN(d.getTime()) ? 'Unscheduled' : d.toISOString().split('T')[0];
   };
 
-  const formatHeaderDate = (dateKey) => {
-    if (dateKey === 'Unscheduled') return 'Unscheduled Date';
-    return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-IN', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  // Filter bookings by search term and optional single date filter
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
       const matchesSearch =
@@ -504,28 +332,25 @@ export default function AdminDashboard() {
 
       const bookingDateKey = getDateKey(b.startTime);
       const matchesDate = selectedDateFilter ? bookingDateKey === selectedDateFilter : true;
-
       return matchesSearch && matchesDate;
     });
   }, [bookings, bookingFilter, selectedDateFilter]);
 
-  // Group filtered bookings by scheduled arrival date
   const groupedBookings = useMemo(() => {
     const groups = {};
     filteredBookings.forEach((b) => {
       const key = getDateKey(b.startTime);
-      if (!groups[key]) {
-        groups[key] = [];
-      }
+      if (!groups[key]) groups[key] = [];
       groups[key].push(b);
     });
 
-    // Sort dates descending (newest dates first)
     return Object.keys(groups)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
       .map((dateKey) => ({
         dateKey,
-        formattedDate: formatHeaderDate(dateKey),
+        formattedDate: dateKey === 'Unscheduled' ? 'Unscheduled' : new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-IN', {
+          weekday: 'long', day: 'numeric', month: 'short', year: 'numeric',
+        }),
         items: groups[dateKey],
         totalDayRevenue: groups[dateKey].reduce((sum, item) => sum + getDisplayAmount(item), 0),
       }));
@@ -558,8 +383,8 @@ export default function AdminDashboard() {
           <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
             <ShieldCheck className="w-3.5 h-3.5" /> Admin Console
           </div>
-          <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">Kannur System Control</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">Configure locations, manage floor layouts & bays, assign staff, and monitor live metrics.</p>
+          <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">Kannur Smart Parking Core</h1>
+          <p className="text-xs text-slate-500 mt-1 font-medium">Dual-shift staff synchronization, floor bay layouts, financial telemetry, and live audit tracking.</p>
         </div>
 
         <button
@@ -583,13 +408,19 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab('locations')}
           className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'locations' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
         >
-          Manage Facilities
+          Facilities & Shifts
         </button>
         <button
           onClick={() => setActiveTab('staff')}
           className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'staff' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
         >
-          Staff Accounts
+          Staff Directory
+        </button>
+        <button
+          onClick={() => setActiveTab('shifts_audit')}
+          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'shifts_audit' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
+        >
+          <Activity className="w-3.5 h-3.5" /> Shift Handover & Audit
         </button>
         <button
           onClick={() => setActiveTab('bookings')}
@@ -677,7 +508,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 2: Facility Management */}
+      {/* TAB 2: Facilities with Dual-Shift Staff Slots */}
       {activeTab === 'locations' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-5 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -707,41 +538,14 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Feature Points / Amenities (Comma Separated)</label>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Feature Points / Amenities</label>
                 <input
                   type="text"
-                  placeholder="e.g. 24/7 Access, CCTV, Covered Parking"
+                  placeholder="24/7 Access, CCTV, Covered Parking"
                   value={newLocation.amenities}
                   onChange={(e) => setNewLocation({ ...newLocation, amenities: e.target.value })}
                   className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                 />
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1 flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5 text-[#0B3D2E]" /> Cover Image
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleImageChange(e, 'new')}
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-slate-100 file:text-xs file:font-bold file:text-slate-800 hover:file:bg-slate-200 cursor-pointer"
-                />
-                {newLocation.imageUrl && (
-                  <div className="mt-2.5 relative rounded-xl overflow-hidden h-28 border border-slate-200">
-                    <img src={newLocation.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedFile(null);
-                        setNewLocation((prev) => ({ ...prev, imageUrl: '' }));
-                      }}
-                      className="absolute top-2 right-2 p-1 bg-slate-900/80 text-white rounded-full"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -803,90 +607,90 @@ export default function AdminDashboard() {
           </div>
 
           <div className="lg:col-span-7 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-base font-heading font-bold text-slate-900">Active Kannur Facilities ({locations.length})</h2>
-            <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
+            <h2 className="text-base font-heading font-bold text-slate-900">Active Facilities & Dual Shift Roster ({locations.length})</h2>
+            <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
               {locations.map((loc) => {
-                const assignedStaff = staffList.find(
-                  (s) => (s.assignedFacility?._id === loc._id || s.assignedFacility === loc._id) && s.isActive !== false
-                );
-                const facilityImage = loc.imageUrl || loc.image;
+                const isPayyambalam = loc.name.toLowerCase().includes('payyambalam');
+                const shiftInfo = loc.shiftInfo || { activeSlot: 'shift_1', label: 'Shift 1 Active' };
 
                 return (
-                  <div key={loc._id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+                  <div key={loc._id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        {facilityImage ? (
-                          <img src={facilityImage} alt={loc.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
-                            <Building className="w-5 h-5 text-slate-500" />
-                          </div>
-                        )}
-                        <div>
-                          <span className="font-heading font-bold text-sm text-slate-900 block">{loc.name}</span>
-                          <span className="text-slate-500 font-medium">{loc.address?.street}, {loc.address?.area}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-heading font-bold text-sm text-slate-900">{loc.name}</span>
+                          {isPayyambalam ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[9px] uppercase tracking-wider">
+                              05:00 - 22:00
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[9px] uppercase tracking-wider">
+                              24/7 Multi-Shift
+                            </span>
+                          )}
                         </div>
+                        <span className="text-slate-500 font-medium block mt-0.5">{loc.address?.street}, {loc.address?.area}</span>
                       </div>
 
                       <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <span className="font-bold text-[#0B3D2E] bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm">
-                          ₹{loc.pricing?.hourlyRate}/hr
-                        </span>
-
                         <button
                           type="button"
                           onClick={() => openStructureManager(loc)}
                           className="px-2.5 py-1.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white rounded-lg font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all cursor-pointer"
-                          title="Configure Floors & Bays"
                         >
                           <Layers className="w-3.5 h-3.5 text-[#F2B705]" /> Layout
                         </button>
 
                         <button
                           type="button"
-                          onClick={() => setSelectedFacility({ loc, assignedStaff })}
-                          className={`p-2 rounded-lg border cursor-pointer transition-all ${
-                            assignedStaff
-                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
-                              : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
-                          }`}
-                          title={assignedStaff ? `Assigned to: ${assignedStaff.name}` : 'No Staff Assigned'}
+                          onClick={() => openShiftAssignModal(loc)}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#0B3D2E] border border-slate-200 rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                         >
-                          {assignedStaff ? (
-                            <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
-                          ) : (
-                            <UserX className="w-3.5 h-3.5 text-red-600" />
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditSelectedFile(null);
-                            setEditingFacility({
-                              ...loc,
-                              amenities: Array.isArray(loc.amenities) ? loc.amenities.join(', ') : loc.amenities || '',
-                            });
-                          }}
-                          className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 cursor-pointer"
-                          title="Edit Facility"
-                        >
-                          <Edit className="w-3.5 h-3.5 text-blue-600" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteLocation(loc._id, loc.name)}
-                          className="p-2 bg-white hover:bg-red-50 text-red-600 rounded-lg border border-slate-200 cursor-pointer"
-                          title="Delete Facility"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Users className="w-3.5 h-3.5 text-[#0B3D2E]" /> Manage Shifts
                         </button>
                       </div>
                     </div>
 
-                    {loc.description && (
-                      <p className="text-[11px] text-slate-600 line-clamp-2">{loc.description}</p>
-                    )}
+                    {/* Dual Shift Assignment Details */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200 text-[11px]">
+                      {/* Shift 1 Slot */}
+                      <div className={`p-2.5 rounded-lg border ${shiftInfo.activeSlot === 'shift_1' ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-400' : 'bg-white border-slate-200'}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-slate-700">
+                            {isPayyambalam ? 'Shift 1 (05:00-13:30)' : 'Shift 1 (06:00-18:00)'}
+                          </span>
+                          {shiftInfo.activeSlot === 'shift_1' && (
+                            <span className="px-1.5 py-0.2 bg-emerald-600 text-white font-extrabold rounded text-[9px] uppercase animate-pulse">
+                              ON CLOCK
+                            </span>
+                          )}
+                        </div>
+                        {loc.shift1Staff ? (
+                          <span className="font-bold text-[#0B3D2E] block">{loc.shift1Staff.name} ({loc.shift1Staff.email})</span>
+                        ) : (
+                          <span className="text-red-500 font-semibold block">⚠️ No Staff Assigned</span>
+                        )}
+                      </div>
+
+                      {/* Shift 2 Slot */}
+                      <div className={`p-2.5 rounded-lg border ${shiftInfo.activeSlot === 'shift_2' ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-400' : 'bg-white border-slate-200'}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-slate-700">
+                            {isPayyambalam ? 'Shift 2 (13:30-22:00)' : 'Shift 2 (18:00-06:00)'}
+                          </span>
+                          {shiftInfo.activeSlot === 'shift_2' && (
+                            <span className="px-1.5 py-0.2 bg-emerald-600 text-white font-extrabold rounded text-[9px] uppercase animate-pulse">
+                              ON CLOCK
+                            </span>
+                          )}
+                        </div>
+                        {loc.shift2Staff ? (
+                          <span className="font-bold text-[#0B3D2E] block">{loc.shift2Staff.name} ({loc.shift2Staff.email})</span>
+                        ) : (
+                          <span className="text-red-500 font-semibold block">⚠️ No Staff Assigned</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -895,31 +699,31 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 3: Staff Management */}
+      {/* TAB 3: Staff Directory */}
       {activeTab === 'staff' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-4 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-slate-900">Register Staff Operator</h2>
             <form onSubmit={handleCreateStaff} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Staff Member Name</label>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Full Name</label>
                 <input
                   type="text"
                   placeholder="Full Name"
                   value={newStaff.name}
                   onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
                   required
                 />
               </div>
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Staff Email Address</label>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Email Address</label>
                 <input
                   type="email"
                   placeholder="staff@parkora.in"
                   value={newStaff.email}
                   onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
                   required
                 />
               </div>
@@ -927,10 +731,9 @@ export default function AdminDashboard() {
                 <label className="block font-bold uppercase text-slate-500 mb-1">Password</label>
                 <input
                   type="password"
-                  placeholder="Secure Password"
                   value={newStaff.password}
                   onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
                   required
                 />
               </div>
@@ -941,34 +744,47 @@ export default function AdminDashboard() {
                   placeholder="+91 9876543210"
                   value={newStaff.phone}
                   onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
                 />
               </div>
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Assigned Facility</label>
-                <select
-                  value={newStaff.assignedFacility}
-                  onChange={(e) => setNewStaff({ ...newStaff, assignedFacility: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                >
-                  <option value="">None / Unassigned</option>
-                  {locations.map((loc) => (
-                    <option key={loc._id} value={loc._id}>{loc.name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold uppercase text-slate-500 mb-1">Assigned Facility</label>
+                  <select
+                    value={newStaff.assignedFacility}
+                    onChange={(e) => setNewStaff({ ...newStaff, assignedFacility: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                  >
+                    <option value="">Unassigned</option>
+                    {locations.map((loc) => (
+                      <option key={loc._id} value={loc._id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold uppercase text-slate-500 mb-1">Shift Slot</label>
+                  <select
+                    value={newStaff.shiftSlot}
+                    onChange={(e) => setNewStaff({ ...newStaff, shiftSlot: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                  >
+                    <option value="shift_1">Shift 1 (Day)</option>
+                    <option value="shift_2">Shift 2 (Night/Eve)</option>
+                  </select>
+                </div>
               </div>
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 cursor-pointer transition-all shadow-sm text-sm active:scale-95"
+                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 cursor-pointer shadow-sm text-sm"
               >
-                {submitting ? 'Creating Account...' : 'Create Staff Account'}
+                {submitting ? 'Registering...' : 'Create Staff Account'}
               </button>
             </form>
           </div>
 
           <div className="lg:col-span-8 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-base font-heading font-bold text-slate-900">Registered System Staff ({staffList.length})</h2>
+            <h2 className="text-base font-heading font-bold text-slate-900">Registered Personnel ({staffList.length})</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[580px] overflow-y-auto pr-1">
               {staffList.map((staff) => {
                 const assignedLoc = staff.assignedFacility?.name || 'Unassigned';
@@ -978,9 +794,7 @@ export default function AdminDashboard() {
                   <div key={staff._id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-3 flex flex-col justify-between">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full text-white font-bold flex items-center justify-center text-sm shrink-0 ${
-                          isActive ? 'bg-[#0B3D2E]' : 'bg-slate-400'
-                        }`}>
+                        <div className={`w-10 h-10 rounded-full text-white font-bold flex items-center justify-center text-sm shrink-0 ${isActive ? 'bg-[#0B3D2E]' : 'bg-slate-400'}`}>
                           {staff.name?.[0] || 'S'}
                         </div>
                         <div>
@@ -990,52 +804,31 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                       </div>
-
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
                         {isActive ? 'ACTIVE' : 'DEACTIVATED'}
                       </span>
                     </div>
 
                     <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1">
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Assigned Facility:</span>
+                        <span className="text-slate-500">Facility:</span>
                         <span className="font-bold text-[#0B3D2E]">{isActive ? assignedLoc : 'Unassigned'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Phone:</span>
-                        <span className="font-semibold text-slate-800">{staff.phone || 'N/A'}</span>
+                        <span className="text-slate-500">Designated Shift:</span>
+                        <span className="font-extrabold uppercase text-slate-800">{staff.shiftSlot ? staff.shiftSlot.replace('_', ' ') : 'None'}</span>
                       </div>
                     </div>
 
                     <div className="flex gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={() => setViewingStaff(staff)}
-                        className="flex-1 py-1.5 bg-white hover:bg-slate-100 text-slate-800 font-bold border border-slate-200 rounded-lg text-center cursor-pointer"
-                      >
-                        View Profile
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openEditStaffModal(staff)}
-                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-blue-600 font-bold border border-slate-200 rounded-lg cursor-pointer"
-                        title="Edit Account Details"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => handleToggleStaffStatus(staff)}
-                        className={`px-3 py-1.5 font-bold border rounded-lg transition-colors cursor-pointer ${
-                          isActive
-                            ? 'bg-white hover:bg-red-50 text-red-600 border-slate-200'
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white border-transparent'
+                        className={`w-full py-1.5 font-bold border rounded-lg transition-colors cursor-pointer text-xs ${
+                          isActive ? 'bg-white hover:bg-red-50 text-red-600 border-slate-200' : 'bg-emerald-600 text-white'
                         }`}
-                        title={isActive ? 'Deactivate Staff' : 'Activate Staff'}
                       >
-                        {isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                        {isActive ? 'Deactivate Operator' : 'Activate Operator'}
                       </button>
                     </div>
                   </div>
@@ -1046,21 +839,97 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 4: Master Bookings List (Organized & Grouped by Date) */}
+      {/* TAB 4: Shift Handover & Attendance Audit Log */}
+      {activeTab === 'shifts_audit' && (
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div>
+              <h2 className="text-base font-heading font-bold text-slate-900">Live Shift Status & Audit Verification Stream</h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Tracks automatic on-duty logins, handovers between equal shift blocks, and real-time verification at gates.
+              </p>
+            </div>
+            <button
+              onClick={fetchAdminData}
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition-all cursor-pointer self-start sm:self-auto"
+            >
+              Refresh Audit Feed
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-900">
+              <thead className="bg-slate-50 border-b border-slate-200 uppercase text-[10px] font-bold text-slate-500">
+                <tr>
+                  <th className="p-3.5">Timestamp (IST)</th>
+                  <th className="p-3.5">Staff Operator</th>
+                  <th className="p-3.5">Facility Location</th>
+                  <th className="p-3.5">Duty Shift</th>
+                  <th className="p-3.5">Event Action</th>
+                  <th className="p-3.5">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {activityLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                      No shift handover or gate activity recorded yet today.
+                    </td>
+                  </tr>
+                ) : (
+                  activityLogs.map((log) => {
+                    const actionBadge =
+                      log.actionType === 'shift_start_login'
+                        ? 'bg-blue-50 text-blue-800 border-blue-200'
+                        : log.actionType === 'qr_check_in'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200';
+
+                    return (
+                      <tr key={log._id} className="hover:bg-slate-50/70">
+                        <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                        </td>
+                        <td className="p-3.5 font-bold text-slate-900 whitespace-nowrap">
+                          {log.staff?.name || 'Operator'}
+                          <span className="block text-[10px] font-normal text-slate-400">{log.staff?.email}</span>
+                        </td>
+                        <td className="p-3.5 font-medium text-slate-700 whitespace-nowrap">
+                          {log.facility?.name}
+                        </td>
+                        <td className="p-3.5 font-extrabold uppercase text-[#0B3D2E] whitespace-nowrap">
+                          {log.shiftSlot?.replace('_', ' ')}
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${actionBadge}`}>
+                            {log.actionType?.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-slate-600 font-medium max-w-xs truncate">
+                          {log.details || 'Routine gate operation'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: Master Bookings List */}
       {activeTab === 'bookings' && (
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-          
-          {/* Top Bar Filter Controls */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
             <div>
               <h2 className="text-base font-heading font-bold text-slate-900">Master Reservations Ledger</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Showing {filteredBookings.length} total reservations across {groupedBookings.length} scheduled calendar dates.
+                Showing {filteredBookings.length} total reservations across {groupedBookings.length} scheduled dates.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Filter by Date Input */}
               <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                 <Calendar className="w-3.5 h-3.5 text-[#0B3D2E]" />
                 <input
@@ -1070,18 +939,12 @@ export default function AdminDashboard() {
                   className="bg-transparent text-xs font-semibold text-slate-900 outline-none cursor-pointer"
                 />
                 {selectedDateFilter && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDateFilter('')}
-                    className="p-1 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-700 cursor-pointer"
-                    title="Clear Date Filter"
-                  >
+                  <button type="button" onClick={() => setSelectedDateFilter('')} className="p-1 rounded-full text-slate-400 hover:text-slate-700">
                     <X className="w-3 h-3" />
                   </button>
                 )}
               </div>
 
-              {/* Text Search Input */}
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
                 <input
@@ -1095,289 +958,126 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Bookings Grouped Individually by Date */}
-          {groupedBookings.length === 0 ? (
-            <div className="py-16 text-center text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-2xl">
-              No parking reservations match your search or date criteria.
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {groupedBookings.map((group) => (
-                <div key={group.dateKey} className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                  
-                  {/* Distinct Date Header Section */}
-                  <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="p-1.5 bg-[#0B3D2E] text-white rounded-lg">
-                        <Calendar className="w-3.5 h-3.5" />
-                      </span>
-                      <span className="font-heading font-extrabold text-sm text-slate-900">
-                        {group.formattedDate}
-                      </span>
-                      <span className="bg-white border border-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
-                        {group.items.length} {group.items.length === 1 ? 'Booking' : 'Bookings'}
-                      </span>
-                    </div>
-
-                    <div className="text-xs font-semibold text-slate-600">
-                      Day Total: <strong className="text-[#0B3D2E] font-heading font-extrabold text-sm">₹{group.totalDayRevenue}</strong>
-                    </div>
+          <div className="space-y-6">
+            {groupedBookings.map((group) => (
+              <div key={group.dateKey} className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-[#0B3D2E] text-white rounded-lg"><Calendar className="w-3.5 h-3.5" /></span>
+                    <span className="font-heading font-extrabold text-sm text-slate-900">{group.formattedDate}</span>
+                    <span className="bg-white border border-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                      {group.items.length} {group.items.length === 1 ? 'Booking' : 'Bookings'}
+                    </span>
                   </div>
-
-                  {/* Day's Reservations Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-slate-900">
-                      <thead className="bg-white border-b border-slate-200 uppercase text-[10px] font-bold text-slate-400">
-                        <tr>
-                          <th className="p-3.5">Booking Ref</th>
-                          <th className="p-3.5">Customer</th>
-                          <th className="p-3.5">Facility & Slot</th>
-                          <th className="p-3.5">Vehicle Reg</th>
-                          <th className="p-3.5">Scheduled Interval</th>
-                          <th className="p-3.5">Status</th>
-                          <th className="p-3.5">Payment</th>
-                          <th className="p-3.5 text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {group.items.map((b) => {
-                          const amountRupees = getDisplayAmount(b);
-                          const isPaid = b.paymentStatus === 'paid';
-                          const startTime = new Date(b.startTime);
-                          const endTime = new Date(b.endTime);
-
-                          return (
-                            <tr key={b._id} className="hover:bg-slate-50/70 transition-colors">
-                              {/* Booking Reference */}
-                              <td className="p-3.5 font-mono font-bold text-[#0B3D2E] whitespace-nowrap">
-                                {b.bookingRef}
-                              </td>
-
-                              {/* Customer Profile */}
-                              <td className="p-3.5 font-medium whitespace-nowrap">
-                                <span className="font-bold text-slate-900 block">{b.user?.name || 'Customer'}</span>
-                                <span className="text-[11px] text-slate-400 font-normal">{b.user?.email}</span>
-                              </td>
-
-                              {/* Facility & Exact Slot */}
-                              <td className="p-3.5 whitespace-nowrap">
-                                <span className="font-semibold text-slate-900 block">{b.location?.name}</span>
-                                <span className="text-[11px] text-[#0B3D2E] font-bold">
-                                  {b.floor?.name ? `${b.floor.name} — ` : ''}Bay {b.bay?.bayNumber || 'N/A'}
-                                </span>
-                              </td>
-
-                              {/* Vehicle Registration */}
-                              <td className="p-3.5 font-mono uppercase font-bold text-slate-900 whitespace-nowrap">
-                                <div>{b.vehicle?.regNumber}</div>
-                                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 bg-slate-100 rounded text-slate-500">
-                                  {b.vehicle?.vehicleType || 'Car'}
-                                </span>
-                              </td>
-
-                              {/* 24-Hour Time Window */}
-                              <td className="p-3.5 whitespace-nowrap font-medium text-slate-700">
-                                <div className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3 text-[#0B3D2E]" />
-                                  <span>
-                                    {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
-                                  </span>
-                                </div>
-                                <span className="text-[10px] text-slate-400">
-                                  ({b.pricingSnapshot?.durationHours || 1} hrs)
-                                </span>
-                              </td>
-
-                              {/* Operational Status */}
-                              <td className="p-3.5 whitespace-nowrap">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                  b.status === 'confirmed'
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    : b.status === 'active'
-                                    ? 'bg-blue-50 text-blue-700 border border-blue-200 animate-pulse'
-                                    : b.status === 'completed'
-                                    ? 'bg-slate-100 text-slate-700 border border-slate-200'
-                                    : 'bg-red-50 text-red-700 border border-red-200'
-                                }`}>
-                                  {b.status}
-                                </span>
-                              </td>
-
-                              {/* Payment Mode & Status Badge */}
-                              <td className="p-3.5 whitespace-nowrap">
-                                {isPaid ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                    {b.paymentMethod === 'razorpay' ? 'Razorpay Paid' : 'Paid at Gate'}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-semibold">
-                                    <Banknote className="w-3 h-3 text-amber-600" /> Pay on Exit
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Final Amount */}
-                              <td className="p-3.5 text-right font-heading font-extrabold text-sm text-[#0B3D2E] whitespace-nowrap">
-                                ₹{amountRupees}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="text-xs font-semibold text-slate-600">
+                    Day Total: <strong className="text-[#0B3D2E] font-heading font-extrabold text-sm">₹{group.totalDayRevenue}</strong>
                   </div>
-
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* VIEW STAFF PROFILE MODAL */}
-      {viewingStaff && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl relative">
-            <button
-              onClick={() => setViewingStaff(null)}
-              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-full text-white font-heading font-bold text-xl flex items-center justify-center shadow-md ${
-                viewingStaff.isActive !== false ? 'bg-[#0B3D2E]' : 'bg-slate-400'
-              }`}>
-                {viewingStaff.name?.[0] || 'S'}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-900">
+                    <thead className="bg-white border-b border-slate-200 uppercase text-[10px] font-bold text-slate-400">
+                      <tr>
+                        <th className="p-3.5">Booking Ref</th>
+                        <th className="p-3.5">Customer</th>
+                        <th className="p-3.5">Facility & Slot</th>
+                        <th className="p-3.5">Vehicle Reg</th>
+                        <th className="p-3.5">Scheduled Interval</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {group.items.map((b) => (
+                        <tr key={b._id} className="hover:bg-slate-50/70">
+                          <td className="p-3.5 font-mono font-bold text-[#0B3D2E] whitespace-nowrap">{b.bookingRef}</td>
+                          <td className="p-3.5 font-medium whitespace-nowrap">
+                            <span className="font-bold text-slate-900 block">{b.user?.name || 'Customer'}</span>
+                            <span className="text-[11px] text-slate-400 font-normal">{b.user?.email}</span>
+                          </td>
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="font-semibold text-slate-900 block">{b.location?.name}</span>
+                            <span className="text-[11px] text-[#0B3D2E] font-bold">Bay {b.bay?.bayNumber || 'N/A'}</span>
+                          </td>
+                          <td className="p-3.5 font-mono uppercase font-bold text-slate-900 whitespace-nowrap">{b.vehicle?.regNumber}</td>
+                          <td className="p-3.5 whitespace-nowrap font-medium text-slate-700">
+                            {new Date(b.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {new Date(b.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
+                          </td>
+                          <td className="p-3.5 whitespace-nowrap font-extrabold uppercase text-[#145C43]">{b.status}</td>
+                          <td className="p-3.5 text-right font-heading font-extrabold text-sm text-[#0B3D2E] whitespace-nowrap">₹{getDisplayAmount(b)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-heading font-extrabold text-slate-900">{viewingStaff.name}</h3>
-                <span className="text-xs font-semibold text-[#0B3D2E] bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                  Staff Operator Account
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500 font-medium flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-[#0B3D2E]" /> Email Address:
-                </span>
-                <span className="font-bold text-slate-900">{viewingStaff.email}</span>
-              </div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500 font-medium flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-[#0B3D2E]" /> Phone Number:
-                </span>
-                <span className="font-bold text-slate-900">{viewingStaff.phone || 'N/A'}</span>
-              </div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500 font-medium flex items-center gap-1.5">
-                  <Building className="w-3.5 h-3.5 text-[#0B3D2E]" /> Assigned Facility:
-                </span>
-                <span className="font-bold text-[#0B3D2E]">
-                  {viewingStaff.isActive !== false ? (viewingStaff.assignedFacility?.name || 'Unassigned') : 'Unassigned (Deactivated)'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-slate-500 font-medium">Account Status:</span>
-                <span className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] uppercase ${
-                  viewingStaff.isActive !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                }`}>
-                  {viewingStaff.isActive !== false ? 'ACTIVE OPERATOR' : 'DEACTIVATED'}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setViewingStaff(null);
-                  openEditStaffModal(viewingStaff);
-                }}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition-all border border-slate-200 cursor-pointer"
-              >
-                Edit Account
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleStaffStatus(viewingStaff)}
-                className={`flex-1 py-2.5 font-bold rounded-xl text-xs transition-all shadow-sm cursor-pointer ${
-                  viewingStaff.isActive !== false
-                    ? 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
-                    : 'bg-[#0B3D2E] hover:bg-[#145C43] text-white'
-                }`}
-              >
-                {viewingStaff.isActive !== false ? 'Deactivate Account' : 'Activate Account'}
-              </button>
-            </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* EDIT STAFF CREDENTIALS MODAL */}
-      {editingStaff && (
+      {/* DUAL SHIFT REASSIGNMENT MODAL */}
+      {assigningShiftFacility && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-8 space-y-4 shadow-2xl relative">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-8 space-y-5 shadow-2xl relative">
             <button
-              onClick={() => setEditingStaff(null)}
+              onClick={() => setAssigningShiftFacility(null)}
               className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <h3 className="text-lg font-heading font-extrabold text-slate-900">Edit Staff Account</h3>
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0B3D2E] block">Shift Roster Management</span>
+              <h3 className="text-lg font-heading font-extrabold text-slate-900">{assigningShiftFacility.name}</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Assign two operators to divide the operating window into equal duty shifts.
+              </p>
+            </div>
 
-            <form onSubmit={handleUpdateStaff} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveShiftAssignment} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Staff Name</label>
-                <input
-                  type="text"
-                  value={staffForm.name}
-                  onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                  required
-                />
+                <label className="block font-bold uppercase text-slate-700 mb-1">
+                  {assigningShiftFacility.name.toLowerCase().includes('payyambalam')
+                    ? 'Shift 1: 05:00 – 13:30 IST'
+                    : 'Shift 1: 06:00 – 18:00 IST'}
+                </label>
+                <select
+                  value={shift1StaffId}
+                  onChange={(e) => setShift1StaffId(e.target.value)}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                >
+                  <option value="">Unassigned Operator</option>
+                  {activeStaffList.map((s) => (
+                    <option key={s._id} value={s._id}>{s.name} ({s.email})</option>
+                  ))}
+                </select>
               </div>
+
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  value={staffForm.email}
-                  onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Phone Number</label>
-                <input
-                  type="tel"
-                  value={staffForm.phone}
-                  onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                />
-              </div>
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Reset Password (Optional)</label>
-                <input
-                  type="password"
-                  placeholder="Leave blank to keep existing password"
-                  value={staffForm.password}
-                  onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                />
+                <label className="block font-bold uppercase text-slate-700 mb-1">
+                  {assigningShiftFacility.name.toLowerCase().includes('payyambalam')
+                    ? 'Shift 2: 13:30 – 22:00 IST'
+                    : 'Shift 2: 18:00 – 06:00 IST'}
+                </label>
+                <select
+                  value={shift2StaffId}
+                  onChange={(e) => setShift2StaffId(e.target.value)}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                >
+                  <option value="">Unassigned Operator</option>
+                  {activeStaffList.map((s) => (
+                    <option key={s._id} value={s._id}>{s.name} ({s.email})</option>
+                  ))}
+                </select>
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 text-xs cursor-pointer shadow-sm active:scale-95 transition-all"
+                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm active:scale-95 transition-all"
               >
-                {submitting ? 'Saving Credentials...' : 'Update Staff Account'}
+                {submitting ? 'Updating Shifts...' : 'Save Shift Configuration'}
               </button>
             </form>
           </div>
@@ -1400,7 +1100,6 @@ export default function AdminDashboard() {
                 Facility Structure Builder
               </span>
               <h3 className="text-xl font-heading font-extrabold text-slate-900 mt-1">{structureFacility.name}</h3>
-              <p className="text-xs text-slate-500 font-medium">Add custom floors and configure individual slot bays with vehicle types and custom hourly rates.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 overflow-hidden">
@@ -1410,403 +1109,82 @@ export default function AdminDashboard() {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="e.g. Ground Floor / Level 1"
+                      placeholder="e.g. Ground Floor"
                       value={newFloorName}
                       onChange={(e) => setNewFloorName(e.target.value)}
                       className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
                       required
                     />
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="px-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white rounded-xl font-bold text-xs cursor-pointer"
-                    >
+                    <button type="submit" disabled={submitting} className="px-3 bg-[#0B3D2E] text-white rounded-xl font-bold text-xs">
                       <Plus className="w-4 h-4" />
                     </button>
                   </div>
                 </form>
 
                 <div className="space-y-2 flex-1 overflow-y-auto pr-1">
-                  <label className="block font-bold text-slate-400 uppercase text-[10px]">Configured Floors ({facilityFloors.length})</label>
-                  {facilityFloors.map((fl) => {
-                    const count = facilityBays.filter((b) => b.floor === fl._id).length;
-                    return (
-                      <div
-                        key={fl._id}
-                        onClick={() => setActiveFloorId(fl._id)}
-                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-xs ${
-                          activeFloorId === fl._id
-                            ? 'bg-[#0B3D2E] text-white border-[#0B3D2E] shadow-sm font-bold'
-                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
-                        }`}
-                      >
-                        <div>
-                          <span>{fl.name}</span>
-                          <span className="block text-[10px] opacity-75">{count} Bays configured</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteFloor(fl._id, fl.name);
-                          }}
-                          className="p-1 hover:bg-red-500/20 text-slate-400 hover:text-red-500 rounded cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
+                  {facilityFloors.map((fl) => (
+                    <div
+                      key={fl._id}
+                      onClick={() => setActiveFloorId(fl._id)}
+                      className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer text-xs ${
+                        activeFloorId === fl._id ? 'bg-[#0B3D2E] text-white font-bold' : 'bg-slate-50 text-slate-800'
+                      }`}
+                    >
+                      <span>{fl.name}</span>
+                      <button type="button" onClick={() => handleDeleteFloor(fl._id, fl.name)} className="p-1 hover:text-red-500">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="md:col-span-8 flex flex-col space-y-4 overflow-hidden">
-                {activeFloorId ? (
-                  <>
-                    <form onSubmit={handleCreateBay} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 text-xs">
-                      <span className="font-bold text-slate-900 block">Add Bay to Active Floor</span>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Bay Code</label>
-                          <input
-                            type="text"
-                            placeholder="G-01"
-                            value={newBay.bayNumber}
-                            onChange={(e) => setNewBay({ ...newBay, bayNumber: e.target.value.toUpperCase() })}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold uppercase text-xs"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Vehicle Type</label>
-                          <select
-                            value={newBay.supportedVehicleType}
-                            onChange={(e) => setNewBay({ ...newBay, supportedVehicleType: e.target.value })}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                          >
-                            <option value="car">Car / SUV</option>
-                            <option value="bike">Two-Wheeler</option>
-                            <option value="ev">EV Vehicle</option>
-                            <option value="heavy">Heavy Vehicle</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                            Custom Rate (₹/hr)
-                          </label>
-                          <input
-                            type="number"
-                            placeholder={`Default (₹${structureFacility?.pricing?.hourlyRate ?? structureFacility?.hourlyRate ?? 30})`}
-                            value={newBay.customHourlyRate}
-                            onChange={(e) => setNewBay({ ...newBay, customHourlyRate: e.target.value })}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                          />
-                        </div>
-                      </div>
+                {activeFloorId && (
+                  <form onSubmit={handleCreateBay} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Bay Code (e.g. G-01)"
+                        value={newBay.bayNumber}
+                        onChange={(e) => setNewBay({ ...newBay, bayNumber: e.target.value.toUpperCase() })}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold"
+                        required
+                      />
+                      <select
+                        value={newBay.supportedVehicleType}
+                        onChange={(e) => setNewBay({ ...newBay, supportedVehicleType: e.target.value })}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                      >
+                        <option value="car">Car / SUV</option>
+                        <option value="bike">Two-Wheeler</option>
+                        <option value="ev">EV Vehicle</option>
+                        <option value="heavy">Heavy Vehicle</option>
+                      </select>
+                      <button type="submit" disabled={submitting} className="px-4 py-1.5 bg-[#0B3D2E] text-white font-bold rounded-lg text-xs">
+                        Add Bay
+                      </button>
+                    </div>
+                  </form>
+                )}
 
-                      <div className="flex items-center gap-4 text-xs font-semibold">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={newBay.isEVCharging}
-                            onChange={(e) => setNewBay({ ...newBay, isEVCharging: e.target.checked })}
-                            className="rounded accent-[#0B3D2E]"
-                          />
-                          <span>EV Charger Port</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer text-amber-700">
-                          <input
-                            type="checkbox"
-                            checked={newBay.isMaintenance}
-                            onChange={(e) => setNewBay({ ...newBay, isMaintenance: e.target.checked })}
-                            className="rounded accent-amber-600"
-                          />
-                          <span>Maintenance Lock</span>
-                        </label>
-                        <button
-                          type="submit"
-                          disabled={submitting}
-                          className="ml-auto px-4 py-1.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-lg text-xs cursor-pointer shadow-sm"
-                        >
-                          Save Bay Slot
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {currentFloorBays.map((bay) => (
+                      <div key={bay._id} className="p-3 rounded-xl border text-xs bg-white flex justify-between items-center">
+                        <div>
+                          <span className="font-heading font-extrabold">{bay.bayNumber}</span>
+                          <span className="text-[10px] text-slate-400 block uppercase">{bay.supportedVehicleType}</span>
+                        </div>
+                        <button type="button" onClick={() => handleDeleteBay(bay._id)} className="text-slate-400 hover:text-red-600">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    </form>
-
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                      <label className="block font-bold text-slate-400 uppercase text-[10px]">
-                        Configured Bay Slots ({currentFloorBays.length})
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                        {currentFloorBays.map((bay) => (
-                          <div
-                            key={bay._id}
-                            className={`p-3 rounded-xl border text-xs flex flex-col justify-between space-y-2 ${
-                              bay.isMaintenance
-                                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                                : 'bg-white border-slate-200 text-slate-800 shadow-sm'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-heading font-extrabold text-sm">{bay.bayNumber}</span>
-                              <div className="flex items-center gap-1">
-                                {bay.isEVCharging && <Zap className="w-3.5 h-3.5 text-[#F2B705]" />}
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteBay(bay._id)}
-                                  className="text-slate-400 hover:text-red-600 p-0.5 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                              <span className="uppercase">{bay.supportedVehicleType}</span>
-                              <span className="text-[#0B3D2E]">
-                                {bay.customHourlyRate ? `₹${bay.customHourlyRate}/hr` : 'Std Rate'}
-                              </span>
-                            </div>
-
-                            <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleBayStatus(bay, 'isMaintenance')}
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
-                                  bay.isMaintenance
-                                    ? 'bg-amber-200 text-amber-900'
-                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                                }`}
-                              >
-                                {bay.isMaintenance ? 'Under Maintenance' : 'Active Bay'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-400 font-medium border border-dashed border-slate-200 rounded-2xl p-8">
-                    Select or create a floor on the left panel to start adding bay slots.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT FACILITY MODAL */}
-      {editingFacility && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 sm:p-8 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => {
-                setEditSelectedFile(null);
-                setEditingFacility(null);
-              }}
-              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <h3 className="text-lg font-heading font-extrabold text-slate-900">Edit Facility Details</h3>
-            
-            <form onSubmit={handleUpdateLocation} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Name</label>
-                <input
-                  type="text"
-                  value={editingFacility.name}
-                  onChange={(e) => setEditingFacility({ ...editingFacility, name: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Description</label>
-                <textarea
-                  rows={3}
-                  value={editingFacility.description || ''}
-                  onChange={(e) => setEditingFacility({ ...editingFacility, description: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium"
-                  placeholder="Overview description..."
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Feature Points / Amenities (Comma Separated)</label>
-                <input
-                  type="text"
-                  value={editingFacility.amenities || ''}
-                  onChange={(e) => setEditingFacility({ ...editingFacility, amenities: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
-                  placeholder="24/7 Access, CCTV, Covered Parking"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Cover Image</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleImageChange(e, 'edit')}
-                  className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs"
-                />
-                {(editingFacility.imageUrl || editingFacility.image) && (
-                  <img src={editingFacility.imageUrl || editingFacility.image} alt="Cover Preview" className="mt-2 h-28 w-full object-cover rounded-xl border" />
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold uppercase text-slate-500 mb-1">Street</label>
-                  <input
-                    type="text"
-                    value={editingFacility.address?.street || editingFacility.street || ''}
-                    onChange={(e) => setEditingFacility({ ...editingFacility, street: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold uppercase text-slate-500 mb-1">Area</label>
-                  <input
-                    type="text"
-                    value={editingFacility.address?.area || editingFacility.area || ''}
-                    onChange={(e) => setEditingFacility({ ...editingFacility, area: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold uppercase text-slate-500 mb-1">Base Rate (₹)</label>
-                  <input
-                    type="number"
-                    value={editingFacility.pricing?.baseRate ?? editingFacility.baseRate ?? 0}
-                    onChange={(e) => setEditingFacility({ ...editingFacility, baseRate: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold uppercase text-slate-500 mb-1">Hourly Rate (₹)</label>
-                  <input
-                    type="number"
-                    value={editingFacility.pricing?.hourlyRate ?? editingFacility.hourlyRate ?? 30}
-                    onChange={(e) => setEditingFacility({ ...editingFacility, hourlyRate: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 text-sm shadow-sm active:scale-95 cursor-pointer transition-all"
-              >
-                {submitting ? 'Updating...' : 'Save Changes'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* FACILITY STAFF REASSIGNMENT & REDIRECT MODAL */}
-      {selectedFacility && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl relative">
-            <button
-              onClick={() => setSelectedFacility(null)}
-              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Facility Operator</span>
-              <h3 className="text-lg font-heading font-extrabold text-slate-900 mt-0.5">{selectedFacility.loc.name}</h3>
-            </div>
-
-            {selectedFacility.assignedStaff ? (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#0B3D2E] text-white font-bold flex items-center justify-center text-sm">
-                    {selectedFacility.assignedStaff.name?.[0] || 'S'}
-                  </div>
-                  <div>
-                    <span className="font-bold text-sm text-slate-900 block">{selectedFacility.assignedStaff.name}</span>
-                    <span className="text-xs text-slate-500">{selectedFacility.assignedStaff.email}</span>
+                    ))}
                   </div>
                 </div>
-
-                <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Phone: {selectedFacility.assignedStaff.phone || 'N/A'}</span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-[#145C43] font-bold text-[10px] uppercase">Active</span>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => handleRedirectToStaffDetails(selectedFacility.assignedStaff)}
-                    className="w-full py-2.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                  >
-                    <User className="w-4 h-4 text-[#F2B705]" /> Show Staff Details in Profile
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-500 font-medium space-y-2">
-                <UserCheck className="w-6 h-6 text-slate-400 mx-auto" />
-                <p>No active staff operator is currently assigned to this facility.</p>
-              </div>
-            )}
-
-            <div className="space-y-3 pt-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                Reassign Active Staff Operator
-              </label>
-              <div className="flex gap-2">
-                <select
-                  value={reassignStaffId}
-                  onChange={(e) => setReassignStaffId(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-                >
-                  <option value="">Select Active Staff Member...</option>
-                  {activeStaffList.map((s) => {
-                    const isAssignedToThis = s.assignedFacility?._id === selectedFacility?.loc?._id || s.assignedFacility === selectedFacility?.loc?._id;
-                    const isAssignedToOther = s.assignedFacility && !isAssignedToThis;
-
-                    let labelSuffix = '';
-                    if (isAssignedToThis) {
-                      labelSuffix = ' — (Currently Assigned Here)';
-                    } else if (isAssignedToOther) {
-                      labelSuffix = ' — (Already Assigned)';
-                    }
-
-                    return (
-                      <option key={s._id} value={s._id}>
-                        {s.name} ({s.email}){labelSuffix}
-                      </option>
-                    );
-                  })}
-                </select>
-                <button
-                  type="button"
-                  disabled={!reassignStaffId || submitting}
-                  onClick={() => handleReassignStaff(reassignStaffId, selectedFacility.loc._id)}
-                  className="px-4 py-2.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                >
-                  Reassign
-                </button>
               </div>
             </div>
-
           </div>
         </div>
       )}

@@ -3,6 +3,8 @@ const ParkingLocation = require('../models/ParkingLocation');
 const Floor = require('../models/Floor');
 const ParkingBay = require('../models/ParkingBay');
 const Booking = require('../models/Booking');
+const StaffActivityLog = require('../models/StaffActivityLog');
+const { getActiveShiftDetails } = require('../utils/shiftHelper');
 const bcrypt = require('bcryptjs');
 
 // @desc    Get system-wide overview metrics
@@ -32,6 +34,110 @@ exports.getAdminMetrics = async (req, res) => {
         totalRevenue,
       },
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all locations with dual-shift operator metadata
+// @route   GET /api/admin/locations-shifts
+// @access  Private (Admin)
+exports.getLocationsWithShifts = async (req, res) => {
+  try {
+    const locations = await ParkingLocation.find().lean();
+    const staffMembers = await User.find({ role: 'staff', isActive: true }).lean();
+
+    const enrichedLocations = locations.map((loc) => {
+      const shiftInfo = getActiveShiftDetails(loc.name);
+
+      const shift1Staff = staffMembers.find(
+        (s) => String(s.assignedFacility) === String(loc._id) && s.shiftSlot === 'shift_1'
+      ) || null;
+
+      const shift2Staff = staffMembers.find(
+        (s) => String(s.assignedFacility) === String(loc._id) && s.shiftSlot === 'shift_2'
+      ) || null;
+
+      let currentOnDuty = null;
+      if (shiftInfo.activeSlot === 'shift_1') currentOnDuty = shift1Staff;
+      if (shiftInfo.activeSlot === 'shift_2') currentOnDuty = shift2Staff;
+
+      return {
+        ...loc,
+        shiftInfo,
+        shift1Staff,
+        shift2Staff,
+        currentOnDuty,
+      };
+    });
+
+    res.status(200).json({ success: true, data: enrichedLocations });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Assign or Reassign staff to a specific shift slot at a facility
+// @route   PATCH /api/admin/staff/:staffId/assign-shift
+// @access  Private (Admin)
+exports.assignStaffShift = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const { facilityId, shiftSlot } = req.body; // shiftSlot: 'shift_1' | 'shift_2' | null
+
+    const targetStaff = await User.findById(staffId);
+    if (!targetStaff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    if (targetStaff.isActive === false) {
+      return res.status(400).json({ success: false, message: 'Cannot assign a deactivated staff operator.' });
+    }
+
+    // If assigning to a facility shift, ensure no other active staff holds that same slot
+    if (facilityId && shiftSlot) {
+      await User.updateMany(
+        {
+          _id: { $ne: staffId },
+          assignedFacility: facilityId,
+          shiftSlot,
+          role: 'staff',
+        },
+        { $set: { assignedFacility: null, shiftSlot: null } }
+      );
+    }
+
+    targetStaff.assignedFacility = facilityId || null;
+    targetStaff.shiftSlot = facilityId ? shiftSlot || 'shift_1' : null;
+    await targetStaff.save();
+
+    const updatedStaff = await User.findById(staffId)
+      .select('-passwordHash')
+      .populate('assignedFacility', 'name address');
+
+    res.status(200).json({
+      success: true,
+      message: 'Staff shift assigned successfully.',
+      data: updatedStaff,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get full staff activity log (Audit Trail)
+// @route   GET /api/admin/staff-activity
+// @access  Private (Admin)
+exports.getStaffActivityLogs = async (req, res) => {
+  try {
+    const logs = await StaffActivityLog.find()
+      .populate('staff', 'name email phone shiftSlot')
+      .populate('facility', 'name address')
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .lean();
+
+    res.status(200).json({ success: true, count: logs.length, data: logs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -112,7 +218,7 @@ exports.deleteLocation = async (req, res) => {
 
     await User.updateMany(
       { assignedFacility: req.params.id },
-      { $unset: { assignedFacility: '' } }
+      { $unset: { assignedFacility: '', shiftSlot: '' } }
     );
 
     res.status(200).json({ success: true, message: 'Parking facility deleted successfully.' });
@@ -237,12 +343,9 @@ exports.deleteBay = async (req, res) => {
 
 // --- STAFF CONTROLLERS ---
 
-// @desc    Create a new staff account
-// @route   POST /api/admin/staff
-// @access  Private (Admin)
 exports.createStaff = async (req, res) => {
   try {
-    const { name, email, password, phone, assignedFacility } = req.body;
+    const { name, email, password, phone, assignedFacility, shiftSlot } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -260,6 +363,7 @@ exports.createStaff = async (req, res) => {
       role: 'staff',
       isActive: true,
       assignedFacility: assignedFacility || undefined,
+      shiftSlot: assignedFacility ? shiftSlot || 'shift_1' : null,
     });
 
     res.status(201).json({
@@ -269,6 +373,7 @@ exports.createStaff = async (req, res) => {
         name: staff.name,
         email: staff.email,
         assignedFacility: staff.assignedFacility,
+        shiftSlot: staff.shiftSlot,
       },
     });
   } catch (error) {
@@ -276,9 +381,6 @@ exports.createStaff = async (req, res) => {
   }
 };
 
-// @desc    Get all staff members
-// @route   GET /api/admin/staff
-// @access  Private (Admin)
 exports.getStaffMembers = async (req, res) => {
   try {
     const staff = await User.find({ role: 'staff' })
@@ -295,9 +397,6 @@ exports.getStaffMembers = async (req, res) => {
   }
 };
 
-// @desc    Update Staff Credentials (Email, Phone, Name, Optional Password Reset)
-// @route   PUT /api/admin/staff/:staffId
-// @access  Private (Admin)
 exports.updateStaff = async (req, res) => {
   try {
     const { staffId } = req.params;
@@ -340,13 +439,10 @@ exports.updateStaff = async (req, res) => {
   }
 };
 
-// @desc    Assign or Reassign facility to an active staff operator
-// @route   PATCH /api/admin/staff/:staffId/assign
-// @access  Private (Admin)
 exports.assignStaffFacility = async (req, res) => {
   try {
     const { staffId } = req.params;
-    const { facilityId } = req.body;
+    const { facilityId, shiftSlot } = req.body;
 
     const targetStaff = await User.findById(staffId);
     if (!targetStaff) {
@@ -357,24 +453,17 @@ exports.assignStaffFacility = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Cannot assign a facility to a deactivated staff member.' });
     }
 
-    if (facilityId) {
-      await User.updateMany(
-        { assignedFacility: facilityId, role: 'staff' },
-        { $unset: { assignedFacility: '' } }
-      );
-    }
+    targetStaff.assignedFacility = facilityId || null;
+    targetStaff.shiftSlot = facilityId ? shiftSlot || 'shift_1' : null;
+    await targetStaff.save();
 
-    const staff = await User.findByIdAndUpdate(
-      staffId,
-      { assignedFacility: facilityId },
-      { new: true }
-    )
+    const staff = await User.findById(staffId)
       .select('-passwordHash')
       .populate('assignedFacility', 'name address');
 
     res.status(200).json({
       success: true,
-      message: 'Staff facility reassigned successfully.',
+      message: 'Staff facility and shift slot assigned successfully.',
       data: staff,
     });
   } catch (error) {
@@ -382,9 +471,6 @@ exports.assignStaffFacility = async (req, res) => {
   }
 };
 
-// @desc    Toggle Activate / Deactivate staff account
-// @route   PATCH /api/admin/staff/:staffId/deactivate
-// @access  Private (Admin)
 exports.deactivateStaff = async (req, res) => {
   try {
     const { staffId } = req.params;
@@ -394,14 +480,11 @@ exports.deactivateStaff = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Staff member not found.' });
     }
 
-    // Toggle current active state
     const nextActiveState = staffUser.isActive === false;
-
     let updatePayload = { isActive: nextActiveState };
 
-    // Automatically unassign facility when deactivating
     if (!nextActiveState) {
-      updatePayload.$unset = { assignedFacility: '' };
+      updatePayload.$unset = { assignedFacility: '', shiftSlot: '' };
     }
 
     const staff = await User.findByIdAndUpdate(
@@ -422,16 +505,15 @@ exports.deactivateStaff = async (req, res) => {
   }
 };
 
-// @desc    Get all system bookings (Admin view)
-// @route   GET /api/admin/bookings
-// @access  Private (Admin)
 exports.getAllBookings = async (req, res) => {
   try {
     const bookings = await Booking.find()
       .populate('location', 'name')
       .populate('user', 'name email phone')
       .populate('bay', 'bayNumber')
-      .sort('-createdAt');
+      .populate('floor', 'name level')
+      .sort('-createdAt')
+      .lean();
 
     res.status(200).json({ success: true, count: bookings.length, data: bookings });
   } catch (error) {

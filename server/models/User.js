@@ -54,6 +54,11 @@ const userSchema = new mongoose.Schema(
       ref: 'ParkingLocation',
       default: null,
     },
+    shiftSlot: {
+      type: String,
+      enum: ['shift_1', 'shift_2', null],
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,

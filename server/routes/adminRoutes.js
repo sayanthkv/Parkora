@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { upload } = require('../config/cloudinary');
 const {
   getAdminMetrics,
+  getLocationsWithShifts,
+  assignStaffShift,
+  getStaffActivityLogs,
   createLocation,
   updateLocation,
   deleteLocation,
@@ -20,16 +22,22 @@ const {
   deactivateStaff,
   getAllBookings,
 } = require('../controllers/adminController');
+const { protect, authorize } = require('../middleware/auth');
 
-// System Metrics
+router.use(protect);
+router.use(authorize('admin'));
+
+// Shift & Telemetry Extensions
 router.get('/metrics', getAdminMetrics);
+router.get('/locations-shifts', getLocationsWithShifts);
+router.patch('/staff/:staffId/assign-shift', assignStaffShift);
+router.get('/staff-activity', getStaffActivityLogs);
 
-// Location / Facility endpoints
-router.post('/locations', upload.single('imageUrl'), createLocation);
-router.put('/locations/:id', upload.single('imageUrl'), updateLocation);
+// Standard Admin Endpoints
+router.post('/locations', createLocation);
+router.put('/locations/:id', updateLocation);
 router.delete('/locations/:id', deleteLocation);
 
-// Floor & Bay Structure endpoints
 router.get('/locations/:locationId/structure', getLocationStructure);
 router.post('/locations/:locationId/floors', createFloor);
 router.put('/floors/:floorId', updateFloor);
@@ -39,14 +47,12 @@ router.post('/locations/:locationId/floors/:floorId/bays', createBay);
 router.put('/bays/:bayId', updateBay);
 router.delete('/bays/:bayId', deleteBay);
 
-// Bookings endpoint
-router.get('/bookings', getAllBookings);
-
-// Staff Management endpoints
 router.post('/staff', createStaff);
 router.get('/staff', getStaffMembers);
 router.put('/staff/:staffId', updateStaff);
 router.patch('/staff/:staffId/assign', assignStaffFacility);
 router.patch('/staff/:staffId/deactivate', deactivateStaff);
+
+router.get('/bookings', getAllBookings);
 
 module.exports = router;
