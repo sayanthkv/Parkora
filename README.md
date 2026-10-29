@@ -1,4 +1,4 @@
-# 🅿️ Parkora — Smart Parking Reservation & Gate Operations Engine
+#  Parkora — Smart Parking Reservation & Gate Operations Engine
 
 > A high-concurrency, ACID-compliant mobility platform designed to optimize urban parking nodes across Kannur, Kerala. Built on a decoupled MERN architecture with atomic document write-locks, cryptographic pass verification, and dual online/gate reconciliation.
 
