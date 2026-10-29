@@ -56,39 +56,52 @@ const bookingSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    // Aligned status enum resolving schema drift (Flaw 2)
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'active', 'completed', 'cancelled', 'no_show'],
       default: 'confirmed',
       index: true,
     },
-    // Monetary amounts stored in integer Indian Paise (1 Rupee = 100 Paise)
     pricingSnapshot: {
-  hourlyRatePaise: { type: Number, default: 0 },
-  baseFeePaise: { type: Number, default: 0 },
-  durationHours: { type: Number, default: 1 },
-  totalAmountPaise: { type: Number, default: 0 },
-  // Keep legacy fields so old records don't fail validation
-  hourlyRate: { type: Number },
-  totalAmount: { type: Number },
-},
+      hourlyRatePaise: { type: Number, default: 0 },
+      baseFeePaise: { type: Number, default: 0 },
+      durationHours: { type: Number, default: 1 },
+      totalAmountPaise: { type: Number, default: 0 },
+      hourlyRate: { type: Number },
+      totalAmount: { type: Number },
+    },
     paymentStatus: {
-  type: String,
-  enum: ['pending', 'paid', 'refunded', 'pay_at_facility'],
-  default: 'pending',
-},
+      type: String,
+      enum: ['pending', 'paid', 'refunded', 'pay_at_facility'],
+      default: 'pending',
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['pay_at_facility', 'razorpay'],
+      default: 'pay_at_facility',
+    },
     amountCollectedPaise: {
       type: Number,
       default: 0,
     },
-    // Cryptographically secure token hash (SHA-256 of random 32-byte secret)
+    // Razorpay transaction identifiers
+    razorpayOrderId: {
+      type: String,
+      default: null,
+    },
+    razorpayPaymentId: {
+      type: String,
+      default: null,
+    },
+    razorpaySignature: {
+      type: String,
+      default: null,
+    },
     qrTokenHash: {
       type: String,
       required: true,
-      select: false, // Prevent leaking hash in general queries
+      select: false,
     },
-    // Operational audit timestamps & flags
     checkInTime: { type: Date, default: null },
     checkOutTime: { type: Date, default: null },
     checkedInBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

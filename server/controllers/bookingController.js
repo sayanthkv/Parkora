@@ -1,14 +1,19 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const Razorpay = require('razorpay');
 const Booking = require('../models/Booking');
 const ParkingLocation = require('../models/ParkingLocation');
 const ParkingBay = require('../models/ParkingBay');
 
-// @desc    Create a reservation with quota checks, compatibility validation, atomic bay locking & paise pricing
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+// @desc    Create Pay-At-Facility Booking
 // @route   POST /api/bookings
 // @access  Private (Customer)
 exports.createBooking = async (req, res) => {
-  // Start MongoDB Session for Transaction Isolation
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -27,16 +32,12 @@ exports.createBooking = async (req, res) => {
     const reqEnd = new Date(endTime);
     const now = new Date();
 
-    // ---------------------------------------------------------
-    // 1. Time, Date & Abuse Boundary Validations (Flaw 3)
-    // ---------------------------------------------------------
     if (isNaN(reqStart.getTime()) || isNaN(reqEnd.getTime())) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ success: false, message: 'Invalid start or end time format.' });
     }
 
-    // Disallow past reservation times (with a 60-second buffer for network latency)
     if (reqStart < new Date(now.getTime() - 60000)) {
       await session.abortTransaction();
       session.endSession();
@@ -49,7 +50,6 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'End time must be after start time.' });
     }
 
-    // Limit 1: Max advance booking window (e.g., maximum 48 hours in advance)
     const MAX_ADVANCE_MS = 48 * 60 * 60 * 1000;
     if (reqStart.getTime() - now.getTime() > MAX_ADVANCE_MS) {
       await session.abortTransaction();
@@ -60,7 +60,6 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Limit 2: Maximum duration cap per booking (e.g., maximum 24 hours)
     const MAX_DURATION_MS = 24 * 60 * 60 * 1000;
     const durationMs = reqEnd.getTime() - reqStart.getTime();
     if (durationMs > MAX_DURATION_MS) {
@@ -68,11 +67,10 @@ exports.createBooking = async (req, res) => {
       session.endSession();
       return res.status(400).json({
         success: false,
-        message: 'Duration limit exceeded: Maximum allowable duration per single reservation is 24 hours.',
+        message: 'Duration limit exceeded: Maximum allowable duration is 24 hours.',
       });
     }
 
-    // Limit 3: Per-user active booking quota to prevent hoarding
     const activeUserBookingsCount = await Booking.countDocuments({
       user: req.user.id,
       status: { $in: ['confirmed', 'active', 'pending'] },
@@ -83,13 +81,10 @@ exports.createBooking = async (req, res) => {
       session.endSession();
       return res.status(429).json({
         success: false,
-        message: 'Active quota exceeded: You can only hold up to 2 active or upcoming reservations concurrently.',
+        message: 'Active quota exceeded: You can only hold up to 2 active reservations concurrently.',
       });
     }
 
-    // ---------------------------------------------------------
-    // 2. Validate Location
-    // ---------------------------------------------------------
     const location = await ParkingLocation.findById(locationId).session(session);
     if (!location || location.isActive === false) {
       await session.abortTransaction();
@@ -97,9 +92,7 @@ exports.createBooking = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Parking facility is inactive or unavailable.' });
     }
 
-    // ---------------------------------------------------------
-    // 3. Atomic Write Lock on Parking Bay
-    // ---------------------------------------------------------
+    // Pessimistic Bay Write-Lock (Flaw 10)
     const bay = await ParkingBay.findOneAndUpdate(
       {
         _id: bayId,
@@ -117,26 +110,21 @@ exports.createBooking = async (req, res) => {
       session.endSession();
       return res.status(404).json({
         success: false,
-        message: 'Selected parking bay is unavailable, disabled, or under maintenance.',
+        message: 'Selected parking bay is unavailable or under maintenance.',
       });
     }
 
-    // ---------------------------------------------------------
-    // 4. Server-Side Vehicle Compatibility Enforcement (Flaw 7)
-    // ---------------------------------------------------------
     const targetVehicleType = vehicleType || 'car';
     if (bay.supportedVehicleType && bay.supportedVehicleType !== targetVehicleType) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
         success: false,
-        message: `Vehicle mismatch: Bay ${bay.bayNumber} is designated strictly for '${bay.supportedVehicleType}', but requested for '${targetVehicleType}'.`,
+        message: `Vehicle mismatch: Bay is designated for '${bay.supportedVehicleType}', but requested for '${targetVehicleType}'.`,
       });
     }
 
-    // ---------------------------------------------------------
-    // 5. Concurrency Check within Session for Overlapping Intervals
-    // ---------------------------------------------------------
+    // Interval Overlap Check
     const existingConflict = await Booking.findOne({
       bay: bayId,
       status: { $in: ['confirmed', 'active', 'pending'] },
@@ -155,9 +143,6 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // ---------------------------------------------------------
-    // 6. Currency Handling in Integer Paise (Flaw 9)
-    // ---------------------------------------------------------
     const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
     const hourlyRateRupees = bay.customHourlyRate ?? location.pricing?.hourlyRate ?? 30;
     const baseFeeRupees = location.pricing?.baseRate || 0;
@@ -166,16 +151,10 @@ exports.createBooking = async (req, res) => {
     const baseFeePaise = Math.round(baseFeeRupees * 100);
     const totalAmountPaise = (durationHours * hourlyRatePaise) + baseFeePaise;
 
-    // ---------------------------------------------------------
-    // 7. Cryptographically Secure QR Token Generation (Flaw 1)
-    // ---------------------------------------------------------
     const bookingRef = `KSP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
     const rawToken = crypto.randomBytes(32).toString('hex');
     const qrTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
-    // ---------------------------------------------------------
-    // 8. Create Booking Document inside Transaction
-    // ---------------------------------------------------------
     const [booking] = await Booking.create(
       [
         {
@@ -198,6 +177,7 @@ exports.createBooking = async (req, res) => {
             totalAmountPaise,
           },
           paymentStatus: 'pending',
+          paymentMethod: 'pay_at_facility',
           amountCollectedPaise: 0,
           qrTokenHash,
         },
@@ -205,11 +185,9 @@ exports.createBooking = async (req, res) => {
       { session }
     );
 
-    // Commit Transaction safely
     await session.commitTransaction();
     session.endSession();
 
-    // Populate relations after successful transaction commit
     const populatedBooking = await Booking.findById(booking._id)
       .populate('location', 'name address coordinates')
       .populate('floor', 'name level')
@@ -220,31 +198,220 @@ exports.createBooking = async (req, res) => {
       message: 'Reservation created successfully',
       data: {
         ...populatedBooking.toObject(),
-        // Client uses this composite string to render the physical QR pass
         qrTicketPayload: `${bookingRef}:${rawToken}`,
       },
     });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-
-    // Catch concurrent write conflicts thrown by MongoDB transaction isolation
-    if (
-      (error.hasErrorLabel && error.hasErrorLabel('TransientTransactionError')) ||
-      error.code === 112 ||
-      error.message?.includes('WriteConflict')
-    ) {
-      return res.status(409).json({
-        success: false,
-        message: 'Bay conflict: This bay was reserved just now. Please pick another bay.',
-      });
-    }
-
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get user's booking history with Server-Side Pagination
+// @desc    Step 1: Create Razorpay Test Order
+// @route   POST /api/bookings/order-razorpay
+// @access  Private (Customer)
+exports.createRazorpayOrder = async (req, res) => {
+  try {
+    const { locationId, bayId, startTime, endTime } = req.body;
+
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    if (start >= end || start < new Date(Date.now() - 60000)) {
+      return res.status(400).json({ success: false, message: 'Invalid start or end time.' });
+    }
+
+    const bay = await ParkingBay.findById(bayId);
+    const location = await ParkingLocation.findById(locationId);
+
+    if (!bay || !location) {
+      return res.status(404).json({ success: false, message: 'Location or Bay not found.' });
+    }
+
+    const durationMs = end.getTime() - start.getTime();
+    const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
+    const hourlyRateRupees = bay.customHourlyRate ?? location.pricing?.hourlyRate ?? 30;
+    const baseFeeRupees = location.pricing?.baseRate || 0;
+
+    const hourlyRatePaise = Math.round(hourlyRateRupees * 100);
+    const baseFeePaise = Math.round(baseFeeRupees * 100);
+    const totalAmountPaise = (durationHours * hourlyRatePaise) + baseFeePaise;
+
+    const receipt = `rcpt_${Date.now().toString().slice(-8)}`;
+
+    const order = await razorpay.orders.create({
+      amount: totalAmountPaise, // In paise
+      currency: 'INR',
+      receipt,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        key: process.env.RAZORPAY_KEY_ID,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Step 2: Verify Razorpay Signature & Commit Booking Atomically
+// @route   POST /api/bookings/verify-razorpay
+// @access  Private (Customer)
+exports.verifyAndCreateBooking = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      locationId,
+      floorId,
+      bayId,
+      vehicleRegNumber,
+      vehicleType,
+      startTime,
+      endTime,
+    } = req.body;
+
+    // 1. Verify Cryptographic Signature
+    const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body)
+      .digest('hex');
+
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+    const candidateBuffer = Buffer.from(razorpay_signature, 'utf8');
+
+    if (
+      expectedBuffer.length !== candidateBuffer.length ||
+      !crypto.timingSafeEqual(expectedBuffer, candidateBuffer)
+    ) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ success: false, message: 'Invalid payment signature. Verification failed.' });
+    }
+
+    const reqStart = new Date(startTime);
+    const reqEnd = new Date(endTime);
+
+    // 2. Lock the Bay Document
+    const bay = await ParkingBay.findOneAndUpdate(
+      {
+        _id: bayId,
+        location: locationId,
+        floor: floorId,
+        status: { $ne: 'maintenance' },
+        isEnabled: { $ne: false },
+      },
+      { $inc: { __v: 1 } },
+      { session, new: true }
+    );
+
+    if (!bay) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ success: false, message: 'Selected bay is unavailable.' });
+    }
+
+    // 3. Interval Overlap Check
+    const existingConflict = await Booking.findOne({
+      bay: bayId,
+      status: { $in: ['confirmed', 'active', 'pending'] },
+      $and: [
+        { startTime: { $lt: reqEnd } },
+        { endTime: { $gt: reqStart } },
+      ],
+    }).session(session);
+
+    if (existingConflict) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(409).json({
+        success: false,
+        message: 'Bay conflict: Slot was reserved just now. Your payment will be refunded.',
+      });
+    }
+
+    const location = await ParkingLocation.findById(locationId).session(session);
+    const durationMs = reqEnd.getTime() - reqStart.getTime();
+    const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
+    const hourlyRateRupees = bay.customHourlyRate ?? location.pricing?.hourlyRate ?? 30;
+    const baseFeeRupees = location.pricing?.baseRate || 0;
+
+    const hourlyRatePaise = Math.round(hourlyRateRupees * 100);
+    const baseFeePaise = Math.round(baseFeeRupees * 100);
+    const totalAmountPaise = (durationHours * hourlyRatePaise) + baseFeePaise;
+
+    const bookingRef = `KSP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const qrTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    const [booking] = await Booking.create(
+      [
+        {
+          bookingRef,
+          user: req.user.id,
+          location: locationId,
+          floor: floorId,
+          bay: bayId,
+          vehicle: {
+            regNumber: vehicleRegNumber.toUpperCase().trim(),
+            vehicleType: vehicleType || 'car',
+          },
+          startTime: reqStart,
+          endTime: reqEnd,
+          status: 'confirmed',
+          pricingSnapshot: {
+            hourlyRatePaise,
+            baseFeePaise,
+            durationHours,
+            totalAmountPaise,
+          },
+          paymentStatus: 'paid', // Mark as paid
+          paymentMethod: 'razorpay',
+          amountCollectedPaise: totalAmountPaise,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
+          razorpaySignature: razorpay_signature,
+          qrTokenHash,
+        },
+      ],
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    const populatedBooking = await Booking.findById(booking._id)
+      .populate('location', 'name address coordinates')
+      .populate('floor', 'name level')
+      .populate('bay', 'bayNumber supportedVehicleType customHourlyRate');
+
+    return res.status(201).json({
+      success: true,
+      message: 'Payment verified and booking confirmed',
+      data: {
+        ...populatedBooking.toObject(),
+        qrTicketPayload: `${bookingRef}:${rawToken}`,
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get user's booking history
 // @route   GET /api/bookings/my
 // @access  Private (Customer)
 exports.getMyBookings = async (req, res) => {
