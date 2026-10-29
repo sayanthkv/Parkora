@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import API from '../api/axios';
-import { MapPin, Printer, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { MapPin, Printer, ArrowLeft, ShieldCheck, Calendar } from 'lucide-react';
 
 export default function Ticket() {
   const { bookingRef } = useParams();
@@ -12,7 +12,6 @@ export default function Ticket() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Retrieve raw ticket secret string from route state or cached session storage
   const [qrPayload, setQrPayload] = useState(
     locationState?.qrTicketPayload || sessionStorage.getItem(`parkora_qr_${bookingRef}`) || null
   );
@@ -24,7 +23,6 @@ export default function Ticket() {
         const match = res.data.data.find((b) => b.bookingRef === bookingRef);
         if (match) {
           setBooking(match);
-          // If we don't have the unhashed composite QR payload, fall back to the bookingRef
           if (!qrPayload) {
             setQrPayload(match.bookingRef);
           }
@@ -48,10 +46,19 @@ export default function Ticket() {
     return <div className="py-28 text-center text-xs font-semibold text-red-600 bg-white min-h-screen">{error || 'Ticket not found'}</div>;
   }
 
-  // Integer paise to Rupee conversion
   const totalRupees = booking.pricingSnapshot?.totalAmountPaise
     ? booking.pricingSnapshot.totalAmountPaise / 100
     : booking.pricingSnapshot?.totalAmount || 0;
+
+  const startDate = new Date(booking.startTime);
+  const endDate = new Date(booking.endTime);
+
+  const formattedBookingDate = startDate.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 
   return (
     <div className="min-h-screen bg-white text-slate-900 pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-xl mx-auto font-body">
@@ -97,6 +104,15 @@ export default function Ticket() {
 
         {/* Booking Particulars */}
         <div className="p-6 sm:p-8 space-y-4 text-xs font-medium">
+          
+          {/* Added Date Banner */}
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <span className="text-slate-500 uppercase tracking-wider text-[10px] font-bold flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-[#0B3D2E]" /> Scheduled Date
+            </span>
+            <span className="font-bold text-xs text-slate-900">{formattedBookingDate}</span>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-slate-500 uppercase tracking-wider text-[10px] font-bold block mb-1">Floor & Bay Slot</span>
@@ -112,13 +128,13 @@ export default function Ticket() {
             <div>
               <span className="text-slate-500 uppercase tracking-wider text-[10px] font-bold block mb-1">Arrival Window (24-Hr)</span>
               <span className="font-semibold text-slate-900">
-                {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
+                {startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
               </span>
             </div>
             <div>
               <span className="text-slate-500 uppercase tracking-wider text-[10px] font-bold block mb-1">Expected Exit (24-Hr)</span>
               <span className="font-semibold text-slate-900">
-                {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
+                {endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
               </span>
             </div>
           </div>

@@ -4,10 +4,9 @@ import API from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
   MapPin, ArrowRight, ArrowLeft, Zap, Info,
-  CheckCircle2, AlertCircle, ShieldCheck, Building
+  CheckCircle2, AlertCircle, ShieldCheck, Building, Calendar
 } from 'lucide-react';
 
-// Helper to get current time string (HH:mm) rounded to next 15-minute interval
 const getCurrentTimeString = () => {
   const now = new Date();
   const minutes = now.getMinutes();
@@ -70,7 +69,6 @@ export default function BookingFlow() {
     fetchLocationData();
   }, [slug]);
 
-  // Extract supported vehicle types dynamically
   const availableVehicleTypes = useMemo(() => {
     if (!location) return [];
 
@@ -182,7 +180,6 @@ export default function BookingFlow() {
       const bookingData = res.data.data;
       const rawPayload = bookingData.qrTicketPayload;
 
-      // Cache raw QR payload into sessionStorage so reload on Ticket view doesn't lose it
       if (rawPayload) {
         sessionStorage.setItem(`parkora_qr_${bookingData.bookingRef}`, rawPayload);
       }
@@ -214,9 +211,15 @@ export default function BookingFlow() {
 
   const { start, end } = getStartAndEndDates();
 
-  // Price calculations in Indian Rupees (derived from backend rate/custom rate)
   const hourlyRateRupees = selectedBay?.customHourlyRate ?? (location.pricing?.hourlyRate || location.price || 30);
   const calculatedTotalRupees = parseInt(durationHours, 10) * hourlyRateRupees;
+
+  const formattedDate = start.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 
   const vehicleLabels = {
     car: 'Car / SUV',
@@ -368,7 +371,7 @@ export default function BookingFlow() {
             <div>
               <h2 className="text-lg font-heading font-bold text-slate-900">Step 2: Choose Your Parking Bay</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
+                {formattedDate} &bull; Window: {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} ({durationHours} hrs)
               </p>
             </div>
 
@@ -476,6 +479,13 @@ export default function BookingFlow() {
               <span className="text-slate-500 font-medium">Facility:</span>
               <span className="font-bold text-slate-900">{location.name}</span>
             </div>
+            
+            {/* Added Reserved Date Row */}
+            <div className="flex justify-between border-b border-slate-200 pb-2.5">
+              <span className="text-slate-500 font-medium">Reservation Date:</span>
+              <span className="font-bold text-slate-900">{formattedDate}</span>
+            </div>
+
             <div className="flex justify-between border-b border-slate-200 pb-2.5">
               <span className="text-slate-500 font-medium">Floor & Bay Slot:</span>
               <span className="font-bold text-[#0B3D2E]">{selectedFloor?.name} — Bay {selectedBay?.bayNumber}</span>
