@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import API from '../api/axios';
 import {
   ShieldCheck, Users, RefreshCw, AlertCircle, CheckCircle2, Search, Building,
   Image as ImageIcon, UserCheck, UserX, X, Edit, Trash2, PieChart as PieIcon, BarChart3,
-  Layers, Plus, Zap, Mail, Phone, User
+  Layers, Plus, Zap, Mail, Phone, User, Calendar, Clock, CreditCard, Banknote
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
@@ -80,7 +80,10 @@ export default function AdminDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
+
+  // Master Bookings Filters
   const [bookingFilter, setBookingFilter] = useState('');
+  const [selectedDateFilter, setSelectedDateFilter] = useState('');
 
   // Filter staff list to only show active operators for assigning tasks
   const activeStaffList = staffList.filter((s) => s.isActive !== false);
@@ -414,7 +417,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Toggle Activation State (Deactivating automatically clears facility assignment)
   const handleToggleStaffStatus = async (staff) => {
     const isDeactivating = staff.isActive !== false;
     const actionText = isDeactivating ? 'deactivate and unassign' : 'reactivate';
@@ -427,7 +429,6 @@ export default function AdminDashboard() {
       const res = await API.patch(`/admin/staff/${staff._id}/deactivate`);
       const updatedStaff = res.data.data;
 
-      // Real-time update of state lists
       setStaffList((prev) =>
         prev.map((s) => (s._id === staff._id ? updatedStaff : s))
       );
@@ -464,12 +465,71 @@ export default function AdminDashboard() {
     setViewingStaff(staffMember);
   };
 
-  const filteredBookings = bookings.filter(
-    (b) =>
-      b.bookingRef?.toLowerCase().includes(bookingFilter.toLowerCase()) ||
-      b.vehicle?.regNumber?.toLowerCase().includes(bookingFilter.toLowerCase()) ||
-      b.user?.name?.toLowerCase().includes(bookingFilter.toLowerCase())
-  );
+  // Helper to safely format amounts from integer paise or legacy Rupees[cite: 16, 18]
+  const getDisplayAmount = (b) => {
+    if (b.paymentStatus === 'paid' && typeof b.amountCollectedPaise === 'number' && b.amountCollectedPaise > 0) {
+      return b.amountCollectedPaise / 100;
+    }
+    if (b.pricingSnapshot?.totalAmountPaise) {
+      return b.pricingSnapshot.totalAmountPaise / 100;
+    }
+    return b.pricingSnapshot?.totalAmount || 0;
+  };
+
+  // Date parsing helper to format clean group keys (YYYY-MM-DD)
+  const getDateKey = (dateStr) => {
+    if (!dateStr) return 'Unscheduled';
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? 'Unscheduled' : d.toISOString().split('T')[0];
+  };
+
+  const formatHeaderDate = (dateKey) => {
+    if (dateKey === 'Unscheduled') return 'Unscheduled Date';
+    return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-IN', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  // Filter bookings by search term and optional single date filter
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      const matchesSearch =
+        b.bookingRef?.toLowerCase().includes(bookingFilter.toLowerCase()) ||
+        b.vehicle?.regNumber?.toLowerCase().includes(bookingFilter.toLowerCase()) ||
+        b.user?.name?.toLowerCase().includes(bookingFilter.toLowerCase()) ||
+        b.location?.name?.toLowerCase().includes(bookingFilter.toLowerCase());
+
+      const bookingDateKey = getDateKey(b.startTime);
+      const matchesDate = selectedDateFilter ? bookingDateKey === selectedDateFilter : true;
+
+      return matchesSearch && matchesDate;
+    });
+  }, [bookings, bookingFilter, selectedDateFilter]);
+
+  // Group filtered bookings by scheduled arrival date
+  const groupedBookings = useMemo(() => {
+    const groups = {};
+    filteredBookings.forEach((b) => {
+      const key = getDateKey(b.startTime);
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(b);
+    });
+
+    // Sort dates descending (newest dates first)
+    return Object.keys(groups)
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+      .map((dateKey) => ({
+        dateKey,
+        formattedDate: formatHeaderDate(dateKey),
+        items: groups[dateKey],
+        totalDayRevenue: groups[dateKey].reduce((sum, item) => sum + getDisplayAmount(item), 0),
+      }));
+  }, [filteredBookings]);
 
   const activeBookedCount = metrics?.activeBookings ?? 0;
   const totalBays = metrics?.totalBays ?? 200;
@@ -483,7 +543,7 @@ export default function AdminDashboard() {
   const facilityRevenueData = locations.map((loc) => {
     const revenue = bookings
       .filter((b) => b.location?._id === loc._id || b.location === loc._id)
-      .reduce((sum, b) => sum + (b.pricingSnapshot?.totalAmount || 0), 0);
+      .reduce((sum, b) => sum + getDisplayAmount(b), 0);
     return { name: loc.name ? loc.name.replace('Kannur ', '') : 'Facility', revenue };
   });
 
@@ -512,28 +572,28 @@ export default function AdminDashboard() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 gap-6 text-xs sm:text-sm font-bold uppercase tracking-wider">
+      <div className="flex border-b border-slate-200 gap-6 text-xs sm:text-sm font-bold uppercase tracking-wider overflow-x-auto">
         <button
           onClick={() => setActiveTab('metrics')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'metrics' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
+          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'metrics' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
         >
           System Overview
         </button>
         <button
           onClick={() => setActiveTab('locations')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'locations' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
+          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'locations' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
         >
           Manage Facilities
         </button>
         <button
           onClick={() => setActiveTab('staff')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'staff' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
+          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'staff' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
         >
           Staff Accounts
         </button>
         <button
           onClick={() => setActiveTab('bookings')}
-          className={`pb-3 transition-colors cursor-pointer ${activeTab === 'bookings' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
+          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'bookings' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
         >
           Master Bookings
         </button>
@@ -620,7 +680,6 @@ export default function AdminDashboard() {
       {/* TAB 2: Facility Management */}
       {activeTab === 'locations' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Add Facility Form */}
           <div className="lg:col-span-5 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-slate-900">Add New Facility</h2>
             <form onSubmit={handleCreateLocation} className="space-y-3 text-xs">
@@ -743,7 +802,6 @@ export default function AdminDashboard() {
             </form>
           </div>
 
-          {/* Active Facilities List */}
           <div className="lg:col-span-7 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-slate-900">Active Kannur Facilities ({locations.length})</h2>
             <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
@@ -785,21 +843,22 @@ export default function AdminDashboard() {
                         </button>
 
                         <button
-  type="button"
-  onClick={() => setSelectedFacility({ loc, assignedStaff })}
-  className={`p-2 rounded-lg border cursor-pointer transition-all ${
-    assignedStaff
-      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
-      : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
-  }`}
-  title={assignedStaff ? `Assigned to: ${assignedStaff.name}` : 'No Staff Assigned'}
->
-  {assignedStaff ? (
-    <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
-  ) : (
-    <UserX className="w-3.5 h-3.5 text-red-600" />
-  )}
-</button>
+                          type="button"
+                          onClick={() => setSelectedFacility({ loc, assignedStaff })}
+                          className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                            assignedStaff
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                              : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                          }`}
+                          title={assignedStaff ? `Assigned to: ${assignedStaff.name}` : 'No Staff Assigned'}
+                        >
+                          {assignedStaff ? (
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                          ) : (
+                            <UserX className="w-3.5 h-3.5 text-red-600" />
+                          )}
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => {
@@ -828,16 +887,6 @@ export default function AdminDashboard() {
                     {loc.description && (
                       <p className="text-[11px] text-slate-600 line-clamp-2">{loc.description}</p>
                     )}
-
-                    {loc.amenities && loc.amenities.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {loc.amenities.map((item, idx) => (
-                          <span key={idx} className="bg-white text-slate-700 px-2 py-0.5 rounded-full border border-slate-200 text-[10px] font-semibold">
-                            ✓ {item}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -846,11 +895,9 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 3: Staff Management & Accounts List */}
+      {/* TAB 3: Staff Management */}
       {activeTab === 'staff' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Create Staff Account Form */}
           <div className="lg:col-span-4 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-slate-900">Register Staff Operator</h2>
             <form onSubmit={handleCreateStaff} className="space-y-3.5 text-xs">
@@ -920,7 +967,6 @@ export default function AdminDashboard() {
             </form>
           </div>
 
-          {/* Registered Staff Profiles & Accounts List */}
           <div className="lg:col-span-8 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-slate-900">Registered System Staff ({staffList.length})</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[580px] overflow-y-auto pr-1">
@@ -945,18 +991,17 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      {/* Dynamic Status Badge */}
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                         isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {isActive ? 'ACTIVE OPERATOR' : 'DEACTIVATED'}
+                        {isActive ? 'ACTIVE' : 'DEACTIVATED'}
                       </span>
                     </div>
 
                     <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Assigned Facility:</span>
-                        <span className="font-bold text-[#0B3D2E]">{isActive ? assignedLoc : 'Unassigned (Disabled)'}</span>
+                        <span className="font-bold text-[#0B3D2E]">{isActive ? assignedLoc : 'Unassigned'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Phone:</span>
@@ -980,8 +1025,6 @@ export default function AdminDashboard() {
                       >
                         <Edit className="w-3.5 h-3.5" />
                       </button>
-                      
-                      {/* Dynamic Toggle Action Button */}
                       <button
                         type="button"
                         onClick={() => handleToggleStaffStatus(staff)}
@@ -1000,53 +1043,195 @@ export default function AdminDashboard() {
               })}
             </div>
           </div>
-
         </div>
       )}
 
-      {/* TAB 4: Master Bookings List */}
+      {/* TAB 4: Master Bookings List (Organized & Grouped by Date) */}
       {activeTab === 'bookings' && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-base font-heading font-bold text-slate-900">All System Reservations ({filteredBookings.length})</h2>
-            <div className="relative w-full sm:w-72">
-              <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Filter by ref, vehicle, or user..."
-                value={bookingFilter}
-                onChange={(e) => setBookingFilter(e.target.value)}
-                className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
-              />
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          
+          {/* Top Bar Filter Controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div>
+              <h2 className="text-base font-heading font-bold text-slate-900">Master Reservations Ledger</h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Showing {filteredBookings.length} total reservations across {groupedBookings.length} scheduled calendar dates.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Filter by Date Input */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <Calendar className="w-3.5 h-3.5 text-[#0B3D2E]" />
+                <input
+                  type="date"
+                  value={selectedDateFilter}
+                  onChange={(e) => setSelectedDateFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-900 outline-none cursor-pointer"
+                />
+                {selectedDateFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDateFilter('')}
+                    className="p-1 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-700 cursor-pointer"
+                    title="Clear Date Filter"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Text Search Input */}
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filter by ref, vehicle, user..."
+                  value={bookingFilter}
+                  onChange={(e) => setBookingFilter(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-900">
-              <thead className="bg-slate-50 border-b border-slate-200 uppercase text-[10px] font-bold text-slate-500">
-                <tr>
-                  <th className="p-3.5">Booking Ref</th>
-                  <th className="p-3.5">Customer</th>
-                  <th className="p-3.5">Facility</th>
-                  <th className="p-3.5">Vehicle</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {filteredBookings.map((b) => (
-                  <tr key={b._id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-3.5 font-mono font-bold text-[#0B3D2E]">{b.bookingRef}</td>
-                    <td className="p-3.5 font-semibold">{b.user?.name || 'Customer'}</td>
-                    <td className="p-3.5 font-medium text-slate-500">{b.location?.name}</td>
-                    <td className="p-3.5 font-mono uppercase font-bold">{b.vehicle?.regNumber}</td>
-                    <td className="p-3.5 uppercase font-bold text-[#145C43]">{b.status}</td>
-                    <td className="p-3.5 font-bold text-slate-900">₹{b.pricingSnapshot?.totalAmount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* Bookings Grouped Individually by Date */}
+          {groupedBookings.length === 0 ? (
+            <div className="py-16 text-center text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-2xl">
+              No parking reservations match your search or date criteria.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {groupedBookings.map((group) => (
+                <div key={group.dateKey} className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  
+                  {/* Distinct Date Header Section */}
+                  <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 bg-[#0B3D2E] text-white rounded-lg">
+                        <Calendar className="w-3.5 h-3.5" />
+                      </span>
+                      <span className="font-heading font-extrabold text-sm text-slate-900">
+                        {group.formattedDate}
+                      </span>
+                      <span className="bg-white border border-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                        {group.items.length} {group.items.length === 1 ? 'Booking' : 'Bookings'}
+                      </span>
+                    </div>
+
+                    <div className="text-xs font-semibold text-slate-600">
+                      Day Total: <strong className="text-[#0B3D2E] font-heading font-extrabold text-sm">₹{group.totalDayRevenue}</strong>
+                    </div>
+                  </div>
+
+                  {/* Day's Reservations Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-900">
+                      <thead className="bg-white border-b border-slate-200 uppercase text-[10px] font-bold text-slate-400">
+                        <tr>
+                          <th className="p-3.5">Booking Ref</th>
+                          <th className="p-3.5">Customer</th>
+                          <th className="p-3.5">Facility & Slot</th>
+                          <th className="p-3.5">Vehicle Reg</th>
+                          <th className="p-3.5">Scheduled Interval</th>
+                          <th className="p-3.5">Status</th>
+                          <th className="p-3.5">Payment</th>
+                          <th className="p-3.5 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {group.items.map((b) => {
+                          const amountRupees = getDisplayAmount(b);
+                          const isPaid = b.paymentStatus === 'paid';
+                          const startTime = new Date(b.startTime);
+                          const endTime = new Date(b.endTime);
+
+                          return (
+                            <tr key={b._id} className="hover:bg-slate-50/70 transition-colors">
+                              {/* Booking Reference */}
+                              <td className="p-3.5 font-mono font-bold text-[#0B3D2E] whitespace-nowrap">
+                                {b.bookingRef}
+                              </td>
+
+                              {/* Customer Profile */}
+                              <td className="p-3.5 font-medium whitespace-nowrap">
+                                <span className="font-bold text-slate-900 block">{b.user?.name || 'Customer'}</span>
+                                <span className="text-[11px] text-slate-400 font-normal">{b.user?.email}</span>
+                              </td>
+
+                              {/* Facility & Exact Slot */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                <span className="font-semibold text-slate-900 block">{b.location?.name}</span>
+                                <span className="text-[11px] text-[#0B3D2E] font-bold">
+                                  {b.floor?.name ? `${b.floor.name} — ` : ''}Bay {b.bay?.bayNumber || 'N/A'}
+                                </span>
+                              </td>
+
+                              {/* Vehicle Registration */}
+                              <td className="p-3.5 font-mono uppercase font-bold text-slate-900 whitespace-nowrap">
+                                <div>{b.vehicle?.regNumber}</div>
+                                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 bg-slate-100 rounded text-slate-500">
+                                  {b.vehicle?.vehicleType || 'Car'}
+                                </span>
+                              </td>
+
+                              {/* 24-Hour Time Window */}
+                              <td className="p-3.5 whitespace-nowrap font-medium text-slate-700">
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-[#0B3D2E]" />
+                                  <span>
+                                    {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-400">
+                                  ({b.pricingSnapshot?.durationHours || 1} hrs)
+                                </span>
+                              </td>
+
+                              {/* Operational Status */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                  b.status === 'confirmed'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : b.status === 'active'
+                                    ? 'bg-blue-50 text-blue-700 border border-blue-200 animate-pulse'
+                                    : b.status === 'completed'
+                                    ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                                    : 'bg-red-50 text-red-700 border border-red-200'
+                                }`}>
+                                  {b.status}
+                                </span>
+                              </td>
+
+                              {/* Payment Mode & Status Badge */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                {isPaid ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    {b.paymentMethod === 'razorpay' ? 'Razorpay Paid' : 'Paid at Gate'}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-semibold">
+                                    <Banknote className="w-3 h-3 text-amber-600" /> Pay on Exit
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Final Amount */}
+                              <td className="p-3.5 text-right font-heading font-extrabold text-sm text-[#0B3D2E] whitespace-nowrap">
+                                ₹{amountRupees}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1096,8 +1281,6 @@ export default function AdminDashboard() {
                   {viewingStaff.isActive !== false ? (viewingStaff.assignedFacility?.name || 'Unassigned') : 'Unassigned (Deactivated)'}
                 </span>
               </div>
-
-              {/* Dynamic Account Status Badge */}
               <div className="flex items-center justify-between pt-1">
                 <span className="text-slate-500 font-medium">Account Status:</span>
                 <span className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] uppercase ${
@@ -1119,8 +1302,6 @@ export default function AdminDashboard() {
               >
                 Edit Account
               </button>
-
-              {/* Dynamic Toggle Action Button */}
               <button
                 type="button"
                 onClick={() => handleToggleStaffStatus(viewingStaff)}
@@ -1412,7 +1593,6 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
-
           </div>
         </div>
       )}
@@ -1593,29 +1773,29 @@ export default function AdminDashboard() {
               </label>
               <div className="flex gap-2">
                 <select
-  value={reassignStaffId}
-  onChange={(e) => setReassignStaffId(e.target.value)}
-  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
->
-  <option value="">Select Active Staff Member...</option>
-  {activeStaffList.map((s) => {
-    const isAssignedToThis = s.assignedFacility?._id === selectedFacility?.loc?._id || s.assignedFacility === selectedFacility?.loc?._id;
-    const isAssignedToOther = s.assignedFacility && !isAssignedToThis;
+                  value={reassignStaffId}
+                  onChange={(e) => setReassignStaffId(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                >
+                  <option value="">Select Active Staff Member...</option>
+                  {activeStaffList.map((s) => {
+                    const isAssignedToThis = s.assignedFacility?._id === selectedFacility?.loc?._id || s.assignedFacility === selectedFacility?.loc?._id;
+                    const isAssignedToOther = s.assignedFacility && !isAssignedToThis;
 
-    let labelSuffix = '';
-    if (isAssignedToThis) {
-      labelSuffix = ' — (Currently Assigned Here)';
-    } else if (isAssignedToOther) {
-      labelSuffix = ' — (Already Assigned)';
-    }
+                    let labelSuffix = '';
+                    if (isAssignedToThis) {
+                      labelSuffix = ' — (Currently Assigned Here)';
+                    } else if (isAssignedToOther) {
+                      labelSuffix = ' — (Already Assigned)';
+                    }
 
-    return (
-      <option key={s._id} value={s._id}>
-        {s.name} ({s.email}){labelSuffix}
-      </option>
-    );
-  })}
-</select>
+                    return (
+                      <option key={s._id} value={s._id}>
+                        {s.name} ({s.email}){labelSuffix}
+                      </option>
+                    );
+                  })}
+                </select>
                 <button
                   type="button"
                   disabled={!reassignStaffId || submitting}
