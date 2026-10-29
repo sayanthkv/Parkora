@@ -13,7 +13,7 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const redirect = searchParams.get('redirect') || '/';
+  const redirectParam = searchParams.get('redirect');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,8 +21,22 @@ export default function Login() {
     setError(null);
 
     try {
-      await login(email, password);
-      navigate(redirect);
+      const user = await login(email, password);
+
+      // Prioritize explicit booking redirect targets (e.g. /book/kannur-fort)
+      if (redirectParam && redirectParam !== '/' && redirectParam !== '/staff') {
+        navigate(redirectParam, { replace: true });
+        return;
+      }
+
+      // Role-based routing to ensure Admin lands directly on the Admin Console
+      if (user?.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (user?.role === 'staff') {
+        navigate('/staff', { replace: true });
+      } else {
+        navigate('/locations', { replace: true });
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid email or password.');
     } finally {

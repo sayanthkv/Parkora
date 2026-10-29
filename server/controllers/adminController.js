@@ -355,16 +355,16 @@ exports.createStaff = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const staff = await User.create({
-      name,
-      email,
-      passwordHash: hashedPassword,
-      phone,
-      role: 'staff',
-      isActive: true,
-      assignedFacility: assignedFacility || undefined,
-      shiftSlot: assignedFacility ? shiftSlot || 'shift_1' : null,
-    });
+   const staff = await User.create({
+  name,
+  email: email.toLowerCase().trim(),
+  passwordHash: password,
+  phone,
+  role: 'staff',
+  isActive: true,
+  assignedFacility: assignedFacility || undefined,
+  shiftSlot: assignedFacility ? shiftSlot || 'shift_1' : null,
+});
 
     res.status(201).json({
       success: true,
@@ -419,9 +419,8 @@ exports.updateStaff = async (req, res) => {
     if (phone !== undefined) staffUser.phone = phone;
 
     if (password && password.trim().length > 0) {
-      const salt = await bcrypt.genSalt(10);
-      staffUser.passwordHash = await bcrypt.hash(password, salt);
-    }
+  staffUser.passwordHash = password;
+}
 
     await staffUser.save();
 
