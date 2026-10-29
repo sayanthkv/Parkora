@@ -42,7 +42,12 @@ export default function BookingFlow() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Date boundaries: Today and strictly 2 days from today (48 hours window)
+  const nowObj = new Date();
+  const todayStr = nowObj.toISOString().split('T')[0];
+
+  const maxAllowedDate = new Date(nowObj.getTime() + 2 * 24 * 60 * 60 * 1000);
+  const maxDateStr = maxAllowedDate.toISOString().split('T')[0];
 
   const [step, setStep] = useState(1);
   const [location, setLocation] = useState(null);
@@ -50,7 +55,12 @@ export default function BookingFlow() {
   const [selectedFloor, setSelectedFloor] = useState(null);
   const [bays, setBays] = useState([]);
 
-  const [date, setDate] = useState(searchParams.get('date') || todayStr);
+  const initialDate = searchParams.get('date');
+  const validInitialDate = initialDate && initialDate >= todayStr && initialDate <= maxDateStr 
+    ? initialDate 
+    : todayStr;
+
+  const [date, setDate] = useState(validInitialDate);
   const [startTime, setStartTime] = useState(searchParams.get('startTime') || getCurrentTimeString());
   const [durationHours, setDurationHours] = useState(searchParams.get('durationHours') || '2');
   const [vehicleType, setVehicleType] = useState(searchParams.get('vehicleType') || 'car');
@@ -133,27 +143,29 @@ export default function BookingFlow() {
     return selectedStart < new Date();
   }, [date, startTime]);
 
+  // Guard checking if selected date is beyond 2 days from today
+  const isExceedingAdvanceLimit = useMemo(() => {
+    if (!date) return false;
+    return date > maxDateStr || date < todayStr;
+  }, [date, maxDateStr, todayStr]);
+
   // Payyambalam Operating Hours Guard: 05:00 to 22:00
   const isOutsideOperatingHours = useMemo(() => {
     if (!isPayyambalam || !date || !startTime) return false;
     const { start, end } = getStartAndEndDates();
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
 
-    // Daily allowed boundaries: 05:00 (5.0) to 22:00 (22.0)
     const startHour = start.getHours() + start.getMinutes() / 60;
     const endHour = end.getHours() + end.getMinutes() / 60;
 
-    // Check if start time is before 05:00 or at/after 22:00
     if (startHour < 5 || startHour >= 22) return true;
-
-    // Check if reservation extends past 22:00
     if (end.getDate() !== start.getDate() || endHour > 22) return true;
 
     return false;
   }, [isPayyambalam, date, startTime, durationHours]);
 
   useEffect(() => {
-    if (!location || !selectedFloor || isPastTime || isOutsideOperatingHours) return;
+    if (!location || !selectedFloor || isPastTime || isOutsideOperatingHours || isExceedingAdvanceLimit) return;
 
     const fetchBayAvailability = async () => {
       setLoadingBays(true);
@@ -179,9 +191,13 @@ export default function BookingFlow() {
     };
 
     fetchBayAvailability();
-  }, [selectedFloor, date, startTime, durationHours, vehicleType, isPastTime, isOutsideOperatingHours]);
+  }, [selectedFloor, date, startTime, durationHours, vehicleType, isPastTime, isOutsideOperatingHours, isExceedingAdvanceLimit]);
 
   const handleNextToStep2 = () => {
+    if (isExceedingAdvanceLimit) {
+      setError('Reservations can only be scheduled up to 2 days in advance.');
+      return;
+    }
     if (isPastTime) {
       setError('Selected arrival time has already passed. Please select a future date and time.');
       return;
@@ -332,6 +348,12 @@ export default function BookingFlow() {
 
     if (!selectedBay) return;
 
+    if (isExceedingAdvanceLimit) {
+      setError('Reservations can only be scheduled up to 2 days in advance.');
+      setStep(1);
+      return;
+    }
+
     if (isPastTime) {
       setError('Cannot reserve for a past time window.');
       setStep(1);
@@ -387,7 +409,6 @@ export default function BookingFlow() {
           <MapPin className="w-3.5 h-3.5 text-[#0B3D2E]" /> {location.address?.street}, {location.address?.area}
         </p>
 
-        {/* Operating Hours Notice Banner */}
         {isPayyambalam && (
           <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
             <Clock className="w-3.5 h-3.5 text-amber-700" />
@@ -428,14 +449,37 @@ export default function BookingFlow() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Arrival Date</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Arrival Date
+                </label>
+                <span className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">
+                  Max 2 days in advance
+                </span>
+              </div>
+              
+              {/* Native Date Picker locked strictly between today and +2 days */}
               <input
                 type="date"
                 value={date}
                 min={todayStr}
+                max={maxDateStr}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                className={`w-full p-3 bg-white border rounded-xl text-sm font-semibold outline-none transition-colors ${
+                  isExceedingAdvanceLimit
+                    ? 'border-red-500 text-red-600'
+                    : 'border-slate-200 text-slate-900 focus:border-[#0B3D2E]'
+                }`}
               />
+              {isExceedingAdvanceLimit ? (
+                <p className="text-[11px] text-red-600 font-semibold mt-1">
+                  Reservations can only be made up to 2 days in advance ({maxDateStr}).
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400 font-medium mt-1">
+                  Reservations open for: {new Date(todayStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} – {new Date(maxDateStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                </p>
+              )}
             </div>
 
             <div>
@@ -513,7 +557,7 @@ export default function BookingFlow() {
 
           <button
             onClick={handleNextToStep2}
-            disabled={!vehicleReg.trim() || isPastTime || isOutsideOperatingHours}
+            disabled={!vehicleReg.trim() || isPastTime || isOutsideOperatingHours || isExceedingAdvanceLimit}
             className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm active:scale-95"
           >
             Select Floor & Bay
