@@ -520,3 +520,30 @@ exports.getAllBookings = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc    Delete a staff account permanently
+// @route   DELETE /api/admin/staff/:staffId
+// @access  Private (Admin)
+exports.deleteStaff = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+
+    const staffUser = await User.findById(staffId);
+    if (!staffUser) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    if (staffUser.role !== 'staff') {
+      return res.status(400).json({ success: false, message: 'Only staff accounts can be deleted here.' });
+    }
+
+    await User.findByIdAndDelete(staffId);
+
+    res.status(200).json({
+      success: true,
+      message: `Staff account for ${staffUser.name} deleted successfully.`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

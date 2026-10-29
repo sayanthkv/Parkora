@@ -21,6 +21,7 @@ const {
   assignStaffFacility,
   deactivateStaff,
   getAllBookings,
+  deleteStaff
 } = require('../controllers/adminController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -52,6 +53,7 @@ router.get('/staff', getStaffMembers);
 router.put('/staff/:staffId', updateStaff);
 router.patch('/staff/:staffId/assign', assignStaffFacility);
 router.patch('/staff/:staffId/deactivate', deactivateStaff);
+router.delete('/staff/:staffId', deleteStaff);
 
 router.get('/bookings', getAllBookings);
 
