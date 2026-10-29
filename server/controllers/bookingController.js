@@ -10,6 +10,44 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
+/**
+ * Validates facility-specific operating windows.
+ * Specifically enforces 05:00 to 22:00 IST for Payyambalam Beach.
+ */
+const validateOperatingHours = (location, startTime, endTime) => {
+  const locName = (location.name || '').toLowerCase();
+  const locSlug = (location.slug || '').toLowerCase();
+  const isPayyambalam = locName.includes('payyambalam') || locSlug.includes('payyambalam');
+
+  if (!isPayyambalam) return { valid: true };
+
+  // Convert to Indian Standard Time (UTC + 5 hours 30 mins)
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const startIST = new Date(startTime.getTime() + istOffset);
+  const endIST = new Date(endTime.getTime() + istOffset);
+
+  const startHour = startIST.getUTCHours() + startIST.getUTCMinutes() / 60;
+  const endHour = endIST.getUTCHours() + endIST.getUTCMinutes() / 60;
+
+  // Window: 05:00 (5.0) to 22:00 (22.0)
+  if (startHour < 5 || startHour >= 22) {
+    return {
+      valid: false,
+      message: 'Payyambalam Beach facility only accepts reservations starting between 05:00 and 22:00.',
+    };
+  }
+
+  // Ensure reservation does not cross calendar days or extend past 22:00
+  if (startIST.getUTCDate() !== endIST.getUTCDate() || endHour > 22) {
+    return {
+      valid: false,
+      message: 'Payyambalam Beach parking closes at 22:00. Reservations cannot extend past 22:00.',
+    };
+  }
+
+  return { valid: true };
+};
+
 // @desc    Create Pay-At-Facility Booking
 // @route   POST /api/bookings
 // @access  Private (Customer)
@@ -92,7 +130,15 @@ exports.createBooking = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Parking facility is inactive or unavailable.' });
     }
 
-    // Pessimistic Bay Write-Lock (Flaw 10)
+    // Payyambalam Beach Operating Hours Check
+    const hoursCheck = validateOperatingHours(location, reqStart, reqEnd);
+    if (!hoursCheck.valid) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ success: false, message: hoursCheck.message });
+    }
+
+    // Pessimistic Bay Write-Lock
     const bay = await ParkingBay.findOneAndUpdate(
       {
         _id: bayId,
@@ -229,6 +275,12 @@ exports.createRazorpayOrder = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Location or Bay not found.' });
     }
 
+    // Payyambalam Beach Operating Hours Check
+    const hoursCheck = validateOperatingHours(location, start, end);
+    if (!hoursCheck.valid) {
+      return res.status(400).json({ success: false, message: hoursCheck.message });
+    }
+
     const durationMs = end.getTime() - start.getTime();
     const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
     const hourlyRateRupees = bay.customHourlyRate ?? location.pricing?.hourlyRate ?? 30;
@@ -303,7 +355,22 @@ exports.verifyAndCreateBooking = async (req, res) => {
     const reqStart = new Date(startTime);
     const reqEnd = new Date(endTime);
 
-    // 2. Lock the Bay Document
+    // 2. Validate Operating Hours
+    const location = await ParkingLocation.findById(locationId).session(session);
+    if (!location || location.isActive === false) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ success: false, message: 'Parking facility is inactive or unavailable.' });
+    }
+
+    const hoursCheck = validateOperatingHours(location, reqStart, reqEnd);
+    if (!hoursCheck.valid) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ success: false, message: hoursCheck.message });
+    }
+
+    // 3. Lock the Bay Document
     const bay = await ParkingBay.findOneAndUpdate(
       {
         _id: bayId,
@@ -322,7 +389,7 @@ exports.verifyAndCreateBooking = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Selected bay is unavailable.' });
     }
 
-    // 3. Interval Overlap Check
+    // 4. Interval Overlap Check
     const existingConflict = await Booking.findOne({
       bay: bayId,
       status: { $in: ['confirmed', 'active', 'pending'] },
@@ -341,7 +408,6 @@ exports.verifyAndCreateBooking = async (req, res) => {
       });
     }
 
-    const location = await ParkingLocation.findById(locationId).session(session);
     const durationMs = reqEnd.getTime() - reqStart.getTime();
     const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
     const hourlyRateRupees = bay.customHourlyRate ?? location.pricing?.hourlyRate ?? 30;
@@ -376,7 +442,7 @@ exports.verifyAndCreateBooking = async (req, res) => {
             durationHours,
             totalAmountPaise,
           },
-          paymentStatus: 'paid', // Mark as paid
+          paymentStatus: 'paid',
           paymentMethod: 'razorpay',
           amountCollectedPaise: totalAmountPaise,
           razorpayOrderId: razorpay_order_id,

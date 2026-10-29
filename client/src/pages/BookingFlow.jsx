@@ -4,7 +4,7 @@ import API from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
   MapPin, ArrowRight, ArrowLeft, Zap, Info,
-  CheckCircle2, AlertCircle, ShieldCheck, Building, Calendar, CreditCard, Banknote
+  CheckCircle2, AlertCircle, ShieldCheck, Building, Calendar, CreditCard, Banknote, Clock
 } from 'lucide-react';
 
 const getCurrentTimeString = () => {
@@ -22,7 +22,6 @@ const getCurrentTimeString = () => {
   return `${hours}:${mins}`;
 };
 
-// Dynamically load Razorpay checkout script if absent from index.html
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     if (window.Razorpay) {
@@ -57,8 +56,6 @@ export default function BookingFlow() {
   const [vehicleType, setVehicleType] = useState(searchParams.get('vehicleType') || 'car');
   const [vehicleReg, setVehicleReg] = useState(user?.vehicles?.[0]?.regNumber || 'KL 13 AS 1234');
   const [selectedBay, setSelectedBay] = useState(null);
-
-  // Payment Selection: 'razorpay' or 'pay_at_facility'
   const [paymentMethod, setPaymentMethod] = useState('razorpay');
 
   const [loading, setLoading] = useState(true);
@@ -72,7 +69,7 @@ export default function BookingFlow() {
         const res = await API.get(`/locations/${slug}`);
         const locData = res.data.data.location;
         const floorData = res.data.data.floors || [];
-        
+
         setLocation(locData);
         setFloors(floorData);
         if (floorData.length > 0) {
@@ -87,11 +84,19 @@ export default function BookingFlow() {
     fetchLocationData();
   }, [slug]);
 
+  // Identify Payyambalam Beach facility
+  const isPayyambalam = useMemo(() => {
+    if (!location) return false;
+    const name = (location.name || '').toLowerCase();
+    const slugStr = (location.slug || slug || '').toLowerCase();
+    return name.includes('payyambalam') || slugStr.includes('payyambalam');
+  }, [location, slug]);
+
   const availableVehicleTypes = useMemo(() => {
     if (!location) return [];
 
     let types = location.supportedVehicleTypes || location.allowedVehicles || [];
-    
+
     if (!types.length && floors.length) {
       const extracted = new Set();
       floors.forEach((fl) => {
@@ -128,8 +133,27 @@ export default function BookingFlow() {
     return selectedStart < new Date();
   }, [date, startTime]);
 
+  // Payyambalam Operating Hours Guard: 05:00 to 22:00
+  const isOutsideOperatingHours = useMemo(() => {
+    if (!isPayyambalam || !date || !startTime) return false;
+    const { start, end } = getStartAndEndDates();
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+
+    // Daily allowed boundaries: 05:00 (5.0) to 22:00 (22.0)
+    const startHour = start.getHours() + start.getMinutes() / 60;
+    const endHour = end.getHours() + end.getMinutes() / 60;
+
+    // Check if start time is before 05:00 or at/after 22:00
+    if (startHour < 5 || startHour >= 22) return true;
+
+    // Check if reservation extends past 22:00
+    if (end.getDate() !== start.getDate() || endHour > 22) return true;
+
+    return false;
+  }, [isPayyambalam, date, startTime, durationHours]);
+
   useEffect(() => {
-    if (!location || !selectedFloor || isPastTime) return;
+    if (!location || !selectedFloor || isPastTime || isOutsideOperatingHours) return;
 
     const fetchBayAvailability = async () => {
       setLoadingBays(true);
@@ -155,18 +179,21 @@ export default function BookingFlow() {
     };
 
     fetchBayAvailability();
-  }, [selectedFloor, date, startTime, durationHours, vehicleType, isPastTime]);
+  }, [selectedFloor, date, startTime, durationHours, vehicleType, isPastTime, isOutsideOperatingHours]);
 
   const handleNextToStep2 = () => {
     if (isPastTime) {
       setError('Selected arrival time has already passed. Please select a future date and time.');
       return;
     }
+    if (isOutsideOperatingHours) {
+      setError('Payyambalam Beach parking only operates between 05:00 AM and 10:00 PM (22:00). Please adjust your schedule.');
+      return;
+    }
     setError(null);
     setStep(2);
   };
 
-  // Standard Facility Booking
   const handleFacilityBooking = async () => {
     setSubmitting(true);
     setError(null);
@@ -200,7 +227,6 @@ export default function BookingFlow() {
     }
   };
 
-  // Razorpay Online Payment Flow
   const handleRazorpayPayment = async () => {
     setSubmitting(true);
     setError(null);
@@ -215,7 +241,6 @@ export default function BookingFlow() {
     try {
       const { start, end } = getStartAndEndDates();
 
-      // Step 1: Create Order on server
       const orderRes = await API.post('/bookings/order-razorpay', {
         locationId: location._id,
         bayId: selectedBay._id,
@@ -225,7 +250,6 @@ export default function BookingFlow() {
 
       const { orderId, amount, currency, key } = orderRes.data.data;
 
-      // Step 2: Open Razorpay modal
       const options = {
         key: key || import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount,
@@ -243,7 +267,6 @@ export default function BookingFlow() {
         },
         handler: async function (response) {
           try {
-            // Step 3: Verify and complete reservation
             const verifyRes = await API.post('/bookings/verify-razorpay', {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
@@ -315,6 +338,12 @@ export default function BookingFlow() {
       return;
     }
 
+    if (isOutsideOperatingHours) {
+      setError('Payyambalam Beach bookings must be between 05:00 AM and 10:00 PM.');
+      setStep(1);
+      return;
+    }
+
     if (paymentMethod === 'razorpay') {
       handleRazorpayPayment();
     } else {
@@ -357,6 +386,14 @@ export default function BookingFlow() {
         <p className="text-xs text-slate-500 flex items-center gap-1 mt-1 font-medium">
           <MapPin className="w-3.5 h-3.5 text-[#0B3D2E]" /> {location.address?.street}, {location.address?.area}
         </p>
+
+        {/* Operating Hours Notice Banner */}
+        {isPayyambalam && (
+          <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
+            <Clock className="w-3.5 h-3.5 text-amber-700" />
+            Operating Window: 05:00 AM – 10:00 PM (22:00) strictly
+          </div>
+        )}
       </div>
 
       {/* Step Indicator */}
@@ -408,17 +445,24 @@ export default function BookingFlow() {
               <input
                 type="time"
                 value={startTime}
-                min={date === todayStr ? getCurrentTimeString() : undefined}
+                min={isPayyambalam ? '05:00' : (date === todayStr ? getCurrentTimeString() : undefined)}
+                max={isPayyambalam ? '21:00' : undefined}
                 onChange={(e) => setStartTime(e.target.value)}
                 className={`w-full p-3 bg-white border rounded-xl text-sm font-semibold outline-none ${
-                  isPastTime ? 'border-red-500 text-red-600' : 'border-slate-200 text-slate-900 focus:border-[#0B3D2E]'
+                  isPastTime || isOutsideOperatingHours
+                    ? 'border-red-500 text-red-600'
+                    : 'border-slate-200 text-slate-900 focus:border-[#0B3D2E]'
                 }`}
               />
-              {isPastTime && (
+              {isPastTime ? (
                 <p className="text-[11px] text-red-600 font-semibold mt-1">
                   Selected time has already passed.
                 </p>
-              )}
+              ) : isOutsideOperatingHours ? (
+                <p className="text-[11px] text-red-600 font-semibold mt-1">
+                  Payyambalam facility is only open between 05:00 and 22:00. End time cannot exceed 22:00.
+                </p>
+              ) : null}
             </div>
 
             <div>
@@ -433,7 +477,7 @@ export default function BookingFlow() {
                 <option value="4">4 Hours</option>
                 <option value="8">8 Hours</option>
                 <option value="12">12 Hours</option>
-                <option value="24">24 Hours (Max Limit)</option>
+                {!isPayyambalam && <option value="24">24 Hours (Max Limit)</option>}
               </select>
             </div>
 
@@ -469,7 +513,7 @@ export default function BookingFlow() {
 
           <button
             onClick={handleNextToStep2}
-            disabled={!vehicleReg.trim() || isPastTime}
+            disabled={!vehicleReg.trim() || isPastTime || isOutsideOperatingHours}
             className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm active:scale-95"
           >
             Select Floor & Bay
