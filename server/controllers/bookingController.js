@@ -5,9 +5,10 @@ const Booking = require('../models/Booking');
 const ParkingLocation = require('../models/ParkingLocation');
 const ParkingBay = require('../models/ParkingBay');
 
+// Safe fallback initialization to prevent build-time/boot crashes if env keys are pending
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'secret_placeholder',
 });
 
 /**
@@ -50,7 +51,7 @@ const validateOperatingHours = (location, startTime, endTime) => {
 
 // @desc    Create Pay-At-Facility Booking
 // @route   POST /api/bookings
-// @access  Private (Customer)
+// @access  Private (Customer, Staff, Admin)
 exports.createBooking = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -138,7 +139,7 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: hoursCheck.message });
     }
 
-    // Pessimistic Bay Write-Lock
+    // Pessimistic Bay Write-Lock (Flaw 10)[cite: 2]
     const bay = await ParkingBay.findOneAndUpdate(
       {
         _id: bayId,
@@ -170,7 +171,7 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Interval Overlap Check
+    // Interval Overlap Check[cite: 2, 6]
     const existingConflict = await Booking.findOne({
       bay: bayId,
       status: { $in: ['confirmed', 'active', 'pending'] },
@@ -237,13 +238,14 @@ exports.createBooking = async (req, res) => {
     const populatedBooking = await Booking.findById(booking._id)
       .populate('location', 'name address coordinates')
       .populate('floor', 'name level')
-      .populate('bay', 'bayNumber supportedVehicleType customHourlyRate');
+      .populate('bay', 'bayNumber supportedVehicleType customHourlyRate')
+      .lean();
 
     return res.status(201).json({
       success: true,
       message: 'Reservation created successfully',
       data: {
-        ...populatedBooking.toObject(),
+        ...populatedBooking,
         qrTicketPayload: `${bookingRef}:${rawToken}`,
       },
     });
@@ -256,9 +258,16 @@ exports.createBooking = async (req, res) => {
 
 // @desc    Step 1: Create Razorpay Test Order
 // @route   POST /api/bookings/order-razorpay
-// @access  Private (Customer)
+// @access  Private (Customer, Staff, Admin)
 exports.createRazorpayOrder = async (req, res) => {
   try {
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: 'Razorpay API credentials are not configured on the server environment.',
+      });
+    }
+
     const { locationId, bayId, startTime, endTime } = req.body;
 
     const start = new Date(startTime);
@@ -293,7 +302,7 @@ exports.createRazorpayOrder = async (req, res) => {
     const receipt = `rcpt_${Date.now().toString().slice(-8)}`;
 
     const order = await razorpay.orders.create({
-      amount: totalAmountPaise, // In paise
+      amount: totalAmountPaise, // in integer paise
       currency: 'INR',
       receipt,
     });
@@ -314,7 +323,7 @@ exports.createRazorpayOrder = async (req, res) => {
 
 // @desc    Step 2: Verify Razorpay Signature & Commit Booking Atomically
 // @route   POST /api/bookings/verify-razorpay
-// @access  Private (Customer)
+// @access  Private (Customer, Staff, Admin)
 exports.verifyAndCreateBooking = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -336,12 +345,12 @@ exports.verifyAndCreateBooking = async (req, res) => {
     // 1. Verify Cryptographic Signature
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
       .update(body)
       .digest('hex');
 
     const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
-    const candidateBuffer = Buffer.from(razorpay_signature, 'utf8');
+    const candidateBuffer = Buffer.from(razorpay_signature || '', 'utf8');
 
     if (
       expectedBuffer.length !== candidateBuffer.length ||
@@ -370,7 +379,7 @@ exports.verifyAndCreateBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: hoursCheck.message });
     }
 
-    // 3. Lock the Bay Document
+    // 3. Lock the Bay Document[cite: 2]
     const bay = await ParkingBay.findOneAndUpdate(
       {
         _id: bayId,
@@ -389,7 +398,7 @@ exports.verifyAndCreateBooking = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Selected bay is unavailable.' });
     }
 
-    // 4. Interval Overlap Check
+    // 4. Interval Overlap Check[cite: 2, 6]
     const existingConflict = await Booking.findOne({
       bay: bayId,
       status: { $in: ['confirmed', 'active', 'pending'] },
@@ -460,13 +469,14 @@ exports.verifyAndCreateBooking = async (req, res) => {
     const populatedBooking = await Booking.findById(booking._id)
       .populate('location', 'name address coordinates')
       .populate('floor', 'name level')
-      .populate('bay', 'bayNumber supportedVehicleType customHourlyRate');
+      .populate('bay', 'bayNumber supportedVehicleType customHourlyRate')
+      .lean();
 
     return res.status(201).json({
       success: true,
       message: 'Payment verified and booking confirmed',
       data: {
-        ...populatedBooking.toObject(),
+        ...populatedBooking,
         qrTicketPayload: `${bookingRef}:${rawToken}`,
       },
     });
@@ -479,22 +489,24 @@ exports.verifyAndCreateBooking = async (req, res) => {
 
 // @desc    Get user's booking history
 // @route   GET /api/bookings/my
-// @access  Private (Customer)
+// @access  Private (Customer, Staff, Admin)
 exports.getMyBookings = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
+    const limit = parseInt(req.query.limit, 10) || 15;
     const skip = (page - 1) * limit;
 
     const totalBookings = await Booking.countDocuments({ user: req.user.id });
 
+    // Speed optimization: .lean() for faster execution and lighter payload
     const bookings = await Booking.find({ user: req.user.id })
       .populate('location', 'name address imageUrl')
       .populate('floor', 'name level')
       .populate('bay', 'bayNumber supportedVehicleType')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     res.status(200).json({
       success: true,
@@ -514,7 +526,7 @@ exports.getMyBookings = async (req, res) => {
 
 // @desc    Cancel an upcoming booking
 // @route   PATCH /api/bookings/:id/cancel
-// @access  Private (Customer)
+// @access  Private (Customer, Staff, Admin)
 exports.cancelBooking = async (req, res) => {
   try {
     const booking = await Booking.findOne({ _id: req.params.id, user: req.user.id });

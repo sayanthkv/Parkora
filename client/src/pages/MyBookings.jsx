@@ -13,7 +13,7 @@ export default function MyBookings() {
       const res = await API.get('/bookings/my');
       setBookings(res.data.data || []);
     } catch (err) {
-      setError('Failed to fetch your booking history.');
+      setError(err.response?.data?.message || 'Failed to fetch your booking history.');
     } finally {
       setLoading(false);
     }
@@ -23,7 +23,6 @@ export default function MyBookings() {
     fetchMyBookings();
   }, []);
 
-  // Helper to format paise or fallback to legacy amounts
   const getDisplayAmount = (b) => {
     if (b.paymentStatus === 'paid' && typeof b.amountCollectedPaise === 'number' && b.amountCollectedPaise > 0) {
       return b.amountCollectedPaise / 100;
@@ -34,7 +33,6 @@ export default function MyBookings() {
     return b.pricingSnapshot?.totalAmount || 0;
   };
 
-  // Helper to format dates cleanly
   const formatBookingDate = (dateStr) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleDateString('en-IN', {
@@ -45,7 +43,6 @@ export default function MyBookings() {
     });
   };
 
-  // Helper to get status pill styling
   const getStatusBadge = (status) => {
     switch (status) {
       case 'confirmed':
@@ -77,7 +74,32 @@ export default function MyBookings() {
       </div>
 
       {loading ? (
-        <div className="py-20 text-center text-xs text-slate-500 font-medium">Loading reservations...</div>
+        // Instant Skeleton Pulse Loader: Eliminates blank loading text delay[cite: 9, 10]
+        <div className="space-y-4 animate-pulse">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-slate-50 rounded-2xl border border-slate-200 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5">
+              <div className="space-y-2.5 flex-1">
+                <div className="flex gap-2">
+                  <div className="h-4 w-28 bg-slate-200 rounded" />
+                  <div className="h-4 w-16 bg-slate-200 rounded-full" />
+                </div>
+                <div className="h-5 w-48 bg-slate-200 rounded" />
+                <div className="h-3 w-64 bg-slate-200 rounded" />
+                <div className="flex gap-2 pt-1">
+                  <div className="h-6 w-32 bg-slate-200 rounded-lg" />
+                  <div className="h-6 w-40 bg-slate-200 rounded-lg" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between md:justify-end gap-6 pt-3 md:pt-0">
+                <div className="space-y-1">
+                  <div className="h-5 w-16 bg-slate-200 rounded" />
+                  <div className="h-3 w-20 bg-slate-200 rounded" />
+                </div>
+                <div className="h-9 w-28 bg-slate-200 rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : error ? (
         <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 font-semibold flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
@@ -111,12 +133,10 @@ export default function MyBookings() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs font-bold text-[#0B3D2E]">{b.bookingRef}</span>
                     
-                    {/* Status Badge */}
                     <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${getStatusBadge(b.status)}`}>
                       {b.status}
                     </span>
 
-                    {/* Payment Status Pill */}
                     {isPaid ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100/70 border border-emerald-300 text-emerald-800 text-[10px] font-bold tracking-wider uppercase">
                         <CheckCircle2 className="w-3 h-3 text-emerald-700" /> Paid
@@ -139,7 +159,6 @@ export default function MyBookings() {
                     <span>Reg: <strong className="uppercase text-slate-900 font-mono">{b.vehicle?.regNumber}</strong></span>
                   </p>
 
-                  {/* Scheduled Date & Time Badge */}
                   <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-600 font-medium">
                     <span className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700 font-semibold">
                       <Calendar className="w-3.5 h-3.5 text-[#0B3D2E]" />
@@ -176,7 +195,6 @@ export default function MyBookings() {
         </div>
       )}
 
-      {/* Security Footer Note */}
       <div className="pt-4 flex items-center justify-center gap-1.5 text-xs text-slate-500 font-medium">
         <ShieldCheck className="w-4 h-4 text-[#0B3D2E]" />
         <span>Validated Digital QR Passes • Present to Gate Operator</span>
