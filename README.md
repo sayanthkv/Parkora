@@ -131,7 +131,7 @@ npm install
 
 server/.env:
 PORT=5000
-MONGO_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/parkora?retryWrites=true&w=majority
+MONGO_URI=mongodb+srv://<yourusername>:<yourpassword>@cluster.mongodb.net/parkora?retryWrites=true&w=majority
 JWT_SECRET=your_super_secret_jwt_key
 RAZORPAY_KEY_ID=rzp_test_yourKeyId
 RAZORPAY_KEY_SECRET=yourKeySecret
