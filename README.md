@@ -114,7 +114,7 @@ Pay at Facility Gate: Drivers receive an instant QR ticket and pay the gate atte
 
 🚀 Local Development Setup
 
-1. Clone & Install
+1. Clone & Install from git
 git clone [https://github.com/your-username/parkora.git](https://github.com/your-username/parkora.git)
 cd parkora
 
