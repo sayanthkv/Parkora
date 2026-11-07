@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { MapPin, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { MapPin, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import API from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 import heroBg from '../assets/knr.jpg';
 
 const DEFAULT_FACILITY_IMAGE = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800';
 
-// Fast & Ultra-Smooth Animated Counter
 const CountUpNumber = ({ end, duration = 900, prefix = '', suffix = '', padZero = false }) => {
   const [count, setCount] = useState(0);
 
@@ -18,8 +18,6 @@ const CountUpNumber = ({ end, duration = 900, prefix = '', suffix = '', padZero 
     const animate = (timestamp) => {
       if (!startTime) startTime = timestamp;
       const progress = Math.min((timestamp - startTime) / duration, 1);
-      
-      // Fast ease-out quart curve (snappy initial rise, soft landing)
       const easeOutQuart = 1 - Math.pow(1 - progress, 4);
       setCount(Math.floor(easeOutQuart * end));
 
@@ -35,13 +33,23 @@ const CountUpNumber = ({ end, duration = 900, prefix = '', suffix = '', padZero 
   }, [end, duration]);
 
   const formattedCount = padZero && count < 10 ? `0${count}` : count;
-
   return <span>{prefix}{formattedCount}{suffix}</span>;
 };
 
 const Home = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Auto-redirect staff or admin to their respective dedicated dashboards
+  useEffect(() => {
+    if (user?.role === 'staff') {
+      navigate('/staff', { replace: true });
+    } else if (user?.role === 'admin') {
+      navigate('/admin', { replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     const fetchLocations = async () => {
@@ -61,6 +69,16 @@ const Home = () => {
     fetchLocations();
   }, []);
 
+  const handleCustomerServiceClick = (e, targetPath = '/locations') => {
+    if (user?.role === 'staff') {
+      e.preventDefault();
+      alert('You are currently on a Staff account. Customer booking is restricted. Redirecting to Staff Operations.');
+      navigate('/staff');
+      return;
+    }
+    navigate(targetPath);
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -68,8 +86,7 @@ const Home = () => {
       transition={{ duration: 0.3 }}
       className="bg-slate-50 text-slate-900 min-h-screen w-full font-body"
     >
-      
-      {/* HERO SECTION WITH BACKDROP IMAGE */}
+      {/* HERO SECTION */}
       <section className="relative min-h-[90vh] flex flex-col justify-between pt-36 pb-36 sm:pb-44 overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img
@@ -80,7 +97,6 @@ const Home = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/55 to-slate-950/75" />
         </div>
 
-        {/* HERO MAIN TEXT CONTENT */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -94,19 +110,19 @@ const Home = () => {
             Parkora Smart Parking
           </h1>
           <p className="text-base sm:text-xl text-slate-200 max-w-2xl mx-auto font-normal leading-relaxed">
-            Pre-book guaranteed parking bays across Kannur public stations, transit hubs, and coastal destinations.
+            Pre-book guaranteed parking bays across Kannur public stations, transit hubs, and coastal destinations[cite: 2].
           </p>
           <div className="pt-3">
-            <Link
-              to="/locations"
+            <button
+              type="button"
+              onClick={(e) => handleCustomerServiceClick(e, '/locations')}
               className="inline-flex items-center gap-2 bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-bold text-sm px-8 py-3.5 rounded-full transition-all duration-300 shadow-lg active:scale-95 cursor-pointer"
             >
               Find Parking Bays <ArrowRight className="h-4 w-4" />
-            </Link>
+            </button>
           </div>
         </motion.div>
 
-        {/* BOTTOM CURVED WAVE DIVIDER */}
         <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
           <svg
             className="w-full h-20 sm:h-28 text-slate-50 fill-current"
@@ -117,7 +133,7 @@ const Home = () => {
           </svg>
         </div>
 
-        {/* FAST & SMOOTH SLIDE-UP STATS CARD */}
+        {/* STATS CARD */}
         <motion.div 
           initial={{ opacity: 0, y: 35 }}
           animate={{ opacity: 1, y: 0 }}
@@ -130,7 +146,7 @@ const Home = () => {
                 <CountUpNumber end={200} suffix="+" duration={900} />
               </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Active Parking Bays</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Railway Station, KSRTC Stand, and Beach complexes in Kannur.</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Railway Station, KSRTC Stand, and Beach complexes in Kannur[cite: 2].</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
@@ -138,7 +154,7 @@ const Home = () => {
                 <CountUpNumber end={100} suffix="%" duration={900} />
               </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Real-Time Guarantee</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Non-overlapping interval calculations validated server-side.</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Non-overlapping interval calculations validated server-side[cite: 2, 6].</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
@@ -146,7 +162,7 @@ const Home = () => {
                 <CountUpNumber end={4} padZero duration={750} />
               </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Major Transit Hubs</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Instant gate check-in via digital QR pass scanning.</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Instant gate check-in via digital QR pass scanning[cite: 2, 6].</p>
             </div>
           </div>
         </motion.div>
@@ -182,8 +198,6 @@ const Home = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {locations.slice(0, 3).map((loc, index) => {
               const displayImg = loc.imageUrl || loc.image || DEFAULT_FACILITY_IMAGE;
-              
-              // Dynamic status calculation
               const hasAvailableCount = typeof loc.availableBaysCount === 'number';
               const availableCount = loc.availableBaysCount ?? loc.availableBays;
 
@@ -220,8 +234,6 @@ const Home = () => {
 
                   <div className="p-6 pt-0">
                     <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-semibold">
-                      
-                      {/* PROFESSIONAL STATUS BADGE */}
                       {hasAvailableCount ? (
                         <span className="inline-flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 font-bold text-[11px]">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -230,16 +242,17 @@ const Home = () => {
                       ) : (
                         <span className="inline-flex items-center gap-1.5 text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 font-bold text-[11px]">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          24/7 Gate Access
+                          24/7 Gate Access[cite: 2]
                         </span>
                       )}
 
-                      <Link
-                        to="/locations"
-                        className="text-slate-900 font-bold flex items-center gap-1 hover:text-emerald-600 transition-colors"
+                      <button
+                        type="button"
+                        onClick={(e) => handleCustomerServiceClick(e, '/locations')}
+                        className="text-slate-900 font-bold flex items-center gap-1 hover:text-emerald-600 transition-colors cursor-pointer"
                       >
                         Select Bay <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
+                      </button>
                     </div>
                   </div>
                 </motion.div>
@@ -283,7 +296,6 @@ const Home = () => {
           </div>
         </div>
       </section>
-
     </motion.div>
   );
 };

@@ -23,7 +23,6 @@ export default function StaffPortal() {
   const [error, setError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
 
-  // Redirect admin directly to admin console
   useEffect(() => {
     if (user && user.role === 'admin') {
       navigate('/admin', { replace: true });
@@ -85,11 +84,13 @@ export default function StaffPortal() {
       setVerificationResult(res.data);
     } catch (err) {
       const errData = err.response?.data;
-      setError(errData?.message || 'Verification lookup failed.');
+      const errorMsg = errData?.message || 'Verification lookup failed.';
+      setError(errorMsg);
+      // If server returned booking details along with the rejection, display them with isValid: false
       if (errData?.data) {
         setVerificationResult({
           isValid: false,
-          message: errData.message,
+          message: errorMsg,
           data: errData.data,
         });
       }
@@ -105,7 +106,6 @@ export default function StaffPortal() {
       const res = await API.post(`/staff/check-in/${bookingId}`);
       setActionSuccess(res.data.message);
 
-      // Deeply preserve populated location, floor, and bay across state updates
       setVerificationResult((prev) => ({
         ...prev,
         isValid: true,
@@ -158,7 +158,6 @@ export default function StaffPortal() {
   const isOnDuty = shiftContext?.isOnDuty ?? true;
   const currentShiftLabel = shiftContext?.shiftInfo?.label || 'Active Shift';
 
-  // Robust field extractions to ensure values never disappear
   const bookingData = verificationResult?.data;
   const facilityName =
     bookingData?.location?.name ||
@@ -167,7 +166,7 @@ export default function StaffPortal() {
 
   const floorName =
     bookingData?.floor?.name ||
-    (bookingData?.floor?.level !== undefined ? `Level ${bookingData.floor.level}` : 'Ground Floor');
+    (bookingData?.floor?.level !== undefined ? `Level ${bookingData.floor.level}` : 'Ground Lot');
 
   const bayNumber =
     bookingData?.bay?.bayNumber ||
@@ -227,7 +226,7 @@ export default function StaffPortal() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">Access Gate & Verification Terminal</h1>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Gate Arrival Rule: Verification opens <strong>5 mins before start time</strong>. Unclaimed reservations are <strong>automatically cancelled after 15 mins</strong>.
+            Gate Arrival Window: <strong>5 mins before start time</strong> up to <strong>15 mins after start time</strong> (unclaimed slots auto-cancel at 15 mins).
           </p>
         </div>
 
@@ -287,9 +286,9 @@ export default function StaffPortal() {
               </div>
             )}
 
-            {/* Verification Result Card: Permanently renders all details across Steps 1, 2, and 3 */}
+            {/* Verification Result Card */}
             {bookingData && (
-              <div className={`p-6 rounded-2xl border ${verificationResult?.isValid ? 'bg-slate-50 border-slate-200' : 'bg-red-50/40 border-red-200'} space-y-4 shadow-sm`}>
+              <div className={`p-6 rounded-2xl border ${verificationResult?.isValid ? 'bg-slate-50 border-slate-200' : 'bg-red-50 border-red-200'} space-y-4 shadow-sm`}>
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                   <div className="flex items-center gap-2">
                     {verificationResult?.isValid ? (
@@ -360,7 +359,7 @@ export default function StaffPortal() {
                     <button
                       onClick={() => handleCheckIn(bookingData._id)}
                       disabled={loadingAction || !verificationResult?.isValid}
-                      className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                      className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                     >
                       {loadingAction ? 'Processing...' : 'Approve & Record Check-In'}
                       <ArrowRight className="w-4 h-4 text-[#F2B705]" />

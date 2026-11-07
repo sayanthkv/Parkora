@@ -1,12 +1,13 @@
 const Booking = require('../models/Booking');
 const ParkingLocation = require('../models/ParkingLocation');
+const ParkingBay = require('../models/ParkingBay');
 const User = require('../models/User');
 const StaffActivityLog = require('../models/StaffActivityLog');
 const { getActiveShiftDetails } = require('../utils/shiftHelper');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 
-// Helper to reliably populate location, floor, bay, and customer details
 const populateBookingRecord = (query) => {
   return query
     .populate('location', 'name address pricing')
@@ -15,7 +16,7 @@ const populateBookingRecord = (query) => {
     .populate('user', 'name email phone');
 };
 
-// @desc    Get on-duty staff information for the facility & auto-log attendance
+// @desc    Get on-duty staff information for facility & auto-log attendance
 // @route   GET /api/staff/shift-context
 // @access  Private (Staff)
 exports.getStaffShiftContext = async (req, res) => {
@@ -28,14 +29,12 @@ exports.getStaffShiftContext = async (req, res) => {
     const facility = currentStaff.assignedFacility;
     const shiftInfo = getActiveShiftDetails(facility.name);
 
-    // Find the staff designated for this facility's current active shift
     const onDutyStaff = await User.findOne({
       assignedFacility: facility._id,
       shiftSlot: shiftInfo.activeSlot,
       isActive: true,
     }).select('-passwordHash');
 
-    // Auto-record login activity if current logged-in user matches active slot
     if (currentStaff.shiftSlot === shiftInfo.activeSlot) {
       const recentLog = await StaffActivityLog.findOne({
         staff: currentStaff._id,
@@ -70,7 +69,7 @@ exports.getStaffShiftContext = async (req, res) => {
   }
 };
 
-// @desc    Switch to the on-duty staff member automatically (project presentation helper)
+// @desc    Switch to the on-duty staff member automatically
 // @route   POST /api/staff/auto-switch-duty
 // @access  Private (Staff, Admin)
 exports.autoSwitchToDutyStaff = async (req, res) => {
@@ -100,7 +99,6 @@ exports.autoSwitchToDutyStaff = async (req, res) => {
       });
     }
 
-    // Generate fresh JWT token for on-duty staff
     const token = jwt.sign(
       { id: activeStaff._id, role: activeStaff.role },
       process.env.JWT_SECRET || 'secret_jwt_key',
@@ -210,7 +208,6 @@ exports.verifyTicket = async (req, res) => {
       return res.status(404).json({ success: false, isValid: false, message: 'Reservation not found.' });
     }
 
-    // Check facility scoping
     const staff = await User.findById(req.user.id);
     if (
       staff &&
@@ -229,7 +226,6 @@ exports.verifyTicket = async (req, res) => {
     const startTime = new Date(booking.startTime);
     const diffMinutes = (now.getTime() - startTime.getTime()) / (60 * 1000);
 
-    // If already active or completed, permit normal checkout flow
     if (booking.status === 'active' || booking.status === 'completed') {
       return res.status(200).json({
         success: true,
@@ -243,12 +239,12 @@ exports.verifyTicket = async (req, res) => {
       return res.status(400).json({
         success: false,
         isValid: false,
-        message: `Booking is ${booking.status.toUpperCase()} (${booking.cancellationReason || 'Slot expired'}).`,
+        message: `Reservation is CANCELLED (${booking.cancellationReason || 'Slot expired'}).`,
         data: booking,
       });
     }
 
-    // Rule 1: Cannot verify earlier than 5 minutes before scheduled start time
+    // Rule 1: No entry earlier than 5 minutes before scheduled start time
     if (diffMinutes < -5) {
       const allowedTimeStr = new Date(startTime.getTime() - 5 * 60 * 1000).toLocaleTimeString([], {
         hour: '2-digit',
@@ -258,22 +254,22 @@ exports.verifyTicket = async (req, res) => {
       return res.status(400).json({
         success: false,
         isValid: false,
-        message: `Early Arrival: Verification opens strictly 5 minutes before scheduled start (from ${allowedTimeStr} IST).`,
+        message: `Early Arrival: Verification opens strictly 5 minutes before start (from ${allowedTimeStr} IST).`,
         data: booking,
       });
     }
 
-    // Rule 2: If no car arrives in the first 15 minutes, cancel automatically
+    // Rule 2: Unclaimed after 15 minutes -> Auto-cancel
     if (diffMinutes > 15) {
       booking.status = 'cancelled';
       booking.cancelledAt = now;
-      booking.cancellationReason = 'Auto-cancelled: Vehicle failed to arrive within the 15-minute grace window.';
+      booking.cancellationReason = 'Auto-cancelled: Customer failed to arrive within the 15-minute grace window.';
       await booking.save();
 
       return res.status(400).json({
         success: false,
         isValid: false,
-        message: 'Reservation Expired: Driver did not arrive within 15 minutes. Reservation has been cancelled automatically.',
+        message: 'Reservation Expired: 15 minutes past start time. Slot has been cancelled and returned to the pool.',
         data: booking,
       });
     }
@@ -281,7 +277,7 @@ exports.verifyTicket = async (req, res) => {
     res.status(200).json({
       success: true,
       isValid: true,
-      message: 'Ticket verified successfully. Ready for arrival check-in.',
+      message: 'Ticket verified successfully. Ready for Check-In.',
       data: booking,
     });
   } catch (error) {
@@ -289,7 +285,7 @@ exports.verifyTicket = async (req, res) => {
   }
 };
 
-// @desc    Check-In vehicle (retains complete populated document)
+// @desc    Check-In vehicle
 // @route   POST /api/staff/check-in/:bookingId
 // @access  Private (Staff)
 exports.checkIn = async (req, res) => {
@@ -305,7 +301,6 @@ exports.checkIn = async (req, res) => {
     const startTime = new Date(booking.startTime);
     const diffMinutes = (now.getTime() - startTime.getTime()) / (60 * 1000);
 
-    // 5-minute early guard
     if (diffMinutes < -5) {
       return res.status(400).json({
         success: false,
@@ -313,7 +308,6 @@ exports.checkIn = async (req, res) => {
       });
     }
 
-    // 15-minute arrival timeout guard
     if (diffMinutes > 15) {
       booking.status = 'cancelled';
       booking.cancelledAt = now;
@@ -322,7 +316,7 @@ exports.checkIn = async (req, res) => {
 
       return res.status(400).json({
         success: false,
-        message: 'Check-in expired: Over 15 minutes past start time. Reservation has been cancelled automatically.',
+        message: 'Check-in expired: Over 15 minutes past start time. Reservation cancelled automatically.',
       });
     }
 
@@ -339,10 +333,9 @@ exports.checkIn = async (req, res) => {
       facility: booking.location,
       actionType: 'qr_check_in',
       shiftSlot: staff.shiftSlot || 'shift_1',
-      details: `Vehicle ${booking.vehicle?.regNumber} checked into Bay`,
+      details: `Vehicle ${booking.vehicle?.regNumber} checked in.`,
     });
 
-    // Populate all details before returning
     const populated = await populateBookingRecord(Booking.findById(booking._id));
 
     res.status(200).json({
@@ -355,7 +348,7 @@ exports.checkIn = async (req, res) => {
   }
 };
 
-// @desc    Check-Out vehicle (retains complete populated document)
+// @desc    Check-Out vehicle
 // @route   POST /api/staff/check-out/:bookingId
 // @access  Private (Staff)
 exports.checkOut = async (req, res) => {
@@ -387,7 +380,6 @@ exports.checkOut = async (req, res) => {
       details: `Vehicle ${booking.vehicle?.regNumber} checked out. Fee finalized.`,
     });
 
-    // Populate all details before returning
     const populated = await populateBookingRecord(Booking.findById(booking._id));
 
     res.status(200).json({
@@ -395,6 +387,194 @@ exports.checkOut = async (req, res) => {
       message: 'Vehicle checked out & departure finalized.',
       data: populated,
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Staff creates an on-spot bay booking for a walk-in customer (locked to staff's facility)
+// @route   POST /api/staff/book-customer
+// @access  Private (Staff)
+exports.createWalkInBooking = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const staff = await User.findById(req.user.id).session(session);
+    if (!staff || !staff.assignedFacility) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ success: false, message: 'Staff operator has no assigned facility.' });
+    }
+
+    const {
+      bayId,
+      floorId,
+      customerEmail,
+      vehicleRegNumber,
+      vehicleType,
+      durationHours,
+    } = req.body;
+
+    const facility = await ParkingLocation.findById(staff.assignedFacility).session(session);
+    if (!facility) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ success: false, message: 'Assigned facility not found.' });
+    }
+
+    const reqStart = new Date();
+    const parsedDuration = Math.max(1, Number(durationHours) || 1);
+    const reqEnd = new Date(reqStart.getTime() + parsedDuration * 60 * 60 * 1000);
+
+    const bay = await ParkingBay.findOneAndUpdate(
+      {
+        _id: bayId,
+        location: facility._id,
+        floor: floorId,
+        status: { $ne: 'maintenance' },
+        isEnabled: { $ne: false },
+      },
+      { $inc: { __v: 1 } },
+      { session, new: true }
+    );
+
+    if (!bay) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ success: false, message: 'Selected parking bay is unavailable or under maintenance.' });
+    }
+
+    const existingConflict = await Booking.findOne({
+      bay: bayId,
+      status: { $in: ['confirmed', 'active', 'pending'] },
+      $and: [
+        { startTime: { $lt: reqEnd } },
+        { endTime: { $gt: reqStart } },
+      ],
+    }).session(session);
+
+    if (existingConflict) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(409).json({
+        success: false,
+        message: 'Bay conflict: This bay was just occupied. Please select another slot.',
+      });
+    }
+
+    const hourlyRateRupees = bay.customHourlyRate ?? facility.pricing?.hourlyRate ?? 30;
+    const baseFeeRupees = facility.pricing?.baseRate || 0;
+    const hourlyRatePaise = Math.round(hourlyRateRupees * 100);
+    const baseFeePaise = Math.round(baseFeeRupees * 100);
+    const totalAmountPaise = (parsedDuration * hourlyRatePaise) + baseFeePaise;
+
+    const bookingRef = `KSP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const qrTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    let targetUserId = req.user.id;
+    if (customerEmail) {
+      const existingCust = await User.findOne({ email: customerEmail.toLowerCase().trim() }).session(session);
+      if (existingCust) targetUserId = existingCust._id;
+    }
+
+    const [booking] = await Booking.create(
+      [
+        {
+          bookingRef,
+          user: targetUserId,
+          location: facility._id,
+          floor: floorId,
+          bay: bayId,
+          vehicle: {
+            regNumber: vehicleRegNumber.toUpperCase().trim(),
+            vehicleType: vehicleType || 'car',
+          },
+          startTime: reqStart,
+          endTime: reqEnd,
+          actualCheckInTime: reqStart,
+          status: 'active',
+          pricingSnapshot: {
+            hourlyRatePaise,
+            baseFeePaise,
+            durationHours: parsedDuration,
+            totalAmountPaise,
+          },
+          paymentStatus: 'pending',
+          paymentMethod: 'pay_at_facility',
+          amountCollectedPaise: 0,
+          qrTokenHash,
+          bookedByStaff: staff._id,
+        },
+      ],
+      { session }
+    );
+
+    await StaffActivityLog.create(
+      [
+        {
+          staff: staff._id,
+          facility: facility._id,
+          actionType: 'qr_check_in',
+          shiftSlot: staff.shiftSlot || 'shift_1',
+          details: `Walk-in registration: Booked Bay ${bay.bayNumber} for ${vehicleRegNumber}`,
+        },
+      ],
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    const populated = await Booking.findById(booking._id)
+      .populate('location', 'name address pricing')
+      .populate('floor', 'name level')
+      .populate('bay', 'bayNumber supportedVehicleType')
+      .lean();
+
+    res.status(201).json({
+      success: true,
+      message: 'Walk-in booking created and vehicle checked in.',
+      data: {
+        ...populated,
+        qrTicketPayload: `${bookingRef}:${rawToken}`,
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all reservations made today for this staff member's facility
+// @route   GET /api/staff/today-bookings
+// @access  Private (Staff)
+exports.getStaffTodayBookings = async (req, res) => {
+  try {
+    const staff = await User.findById(req.user.id);
+    if (!staff.assignedFacility) {
+      return res.status(400).json({ success: false, message: 'No facility assigned.' });
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const bookings = await Booking.find({
+      location: staff.assignedFacility,
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
+    })
+      .populate('user', 'name email phone')
+      .populate('floor', 'name')
+      .populate('bay', 'bayNumber supportedVehicleType')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, count: bookings.length, data: bookings });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -23,13 +23,13 @@ export default function Login() {
     try {
       const user = await login(email, password);
 
-      // Prioritize explicit booking redirect targets (e.g. /book/kannur-fort)
-      if (redirectParam && redirectParam !== '/' && redirectParam !== '/staff') {
+      // Prioritize explicit booking deep-links for customers only
+      if (user?.role === 'customer' && redirectParam && redirectParam !== '/' && redirectParam !== '/staff') {
         navigate(redirectParam, { replace: true });
         return;
       }
 
-      // Role-based routing to ensure Admin lands directly on the Admin Console
+      // Role-based distinct landing page routing
       if (user?.role === 'admin') {
         navigate('/admin', { replace: true });
       } else if (user?.role === 'staff') {

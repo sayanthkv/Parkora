@@ -11,10 +11,15 @@ import Register from './pages/Register';
 import Locations from './pages/Locations';
 import BookingFlow from './pages/BookingFlow';
 import Ticket from './pages/Ticket';
-import StaffPortal from './pages/StaffPortal';
 import AdminDashboard from './pages/AdminDashboard';
 import MyBookings from './pages/MyBookings';
 import Profile from './pages/Profile';
+
+// Dedicated Staff Pages
+import StaffHome from './pages/StaffHome';
+import StaffBookCustomer from './pages/StaffBookCustomer';
+import StaffPortal from './pages/StaffPortal';
+import StaffTodayBookings from './pages/StaffTodayBookings';
 
 function App() {
   return (
@@ -22,29 +27,35 @@ function App() {
       <div className="flex flex-col min-h-screen bg-white text-[#14201B] w-full font-body">
         <Navbar />
         
-        {/* Main Content Area */}
         <main className="flex-grow w-full bg-white">
           <Routes>
-            {/* Public Routes */}
+            {/* Public Access */}
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/locations" element={<Locations />} />
 
-            {/* Authenticated Customer Routes */}
-            <Route element={<ProtectedRoute allowedRoles={['customer', 'staff', 'admin']} />}>
+            {/* Customer Only / Authenticated User Routes */}
+            <Route element={<ProtectedRoute allowedRoles={['customer', 'admin']} />}>
               <Route path="/book/:slug" element={<BookingFlow />} />
               <Route path="/ticket/:bookingRef" element={<Ticket />} />
               <Route path="/my-bookings" element={<MyBookings />} />
+            </Route>
+
+            {/* Common Profile Page */}
+            <Route element={<ProtectedRoute allowedRoles={['customer', 'staff', 'admin']} />}>
               <Route path="/profile" element={<Profile />} />
             </Route>
 
-            {/* Staff Only Routes */}
+            {/* Staff Isolated Operations Portal */}
             <Route element={<ProtectedRoute allowedRoles={['staff', 'admin']} />}>
-              <Route path="/staff" element={<StaffPortal />} />
+              <Route path="/staff" element={<StaffHome />} />
+              <Route path="/staff/book" element={<StaffBookCustomer />} />
+              <Route path="/staff/terminal" element={<StaffPortal />} />
+              <Route path="/staff/today-bookings" element={<StaffTodayBookings />} />
             </Route>
 
-            {/* Admin Only Routes */}
+            {/* Admin Console Route */}
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
               <Route path="/admin" element={<AdminDashboard />} />
             </Route>

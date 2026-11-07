@@ -6,29 +6,40 @@ const ProtectedRoute = ({ allowedRoles }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  // 1. Show loading spinner while AuthContext checks JWT token
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-[#F7F4EE] text-[#0B3D2E]">
+      <div className="flex justify-center items-center h-screen bg-slate-50 text-[#0B3D2E]">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#0B3D2E]"></div>
       </div>
     );
   }
 
-  // 2. If user is not logged in, redirect to login page preserving destination URL
+  // Not logged in -> send to login preserving intent
   if (!user) {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
 
-  // 3. Fallback role check (defaults to 'customer' if role field is unassigned)
   const userRole = user.role || 'customer';
 
-  // 4. If user role is not allowed, redirect to home
+  // Strict role boundaries
   if (allowedRoles && !allowedRoles.includes(userRole)) {
+    if (userRole === 'staff') {
+      alert('You are currently on a Staff account. Access to customer reservation portals is restricted.');
+      return <Navigate to="/staff" replace />;
+    }
+
+    if (userRole === 'customer') {
+      alert('Access restricted: Staff operator credentials required.');
+      return <Navigate to="/locations" replace />;
+    }
+
+    if (userRole === 'admin') {
+      return <Navigate to="/admin" replace />;
+    }
+
     return <Navigate to="/" replace />;
   }
 
-  // 5. Render protected child component
   return <Outlet />;
 };
 

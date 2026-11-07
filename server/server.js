@@ -10,7 +10,6 @@ const connectDB = require('./config/db');
 const initBookingLifecycleJob = require('./jobs/bookingLifecycleJob');
 
 dotenv.config();
-connectDB();
 
 const app = express();
 
@@ -38,7 +37,6 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
       if (!origin) return callback(null, true);
 
       const normalizedOrigin = cleanOrigin(origin);
@@ -54,7 +52,7 @@ app.use(
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true, // Allow httpOnly session cookies across origins
+    credentials: true,
   })
 );
 
@@ -64,7 +62,6 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
 
 // Defend against NoSQL query selector injection ($gt, $ne, etc.)
-// New
 app.use((req, res, next) => {
   if (req.body) mongoSanitize.sanitize(req.body);
   if (req.params) mongoSanitize.sanitize(req.params);
@@ -98,7 +95,7 @@ const authLimiter = rateLimit({
   },
 });
 
-// 5. Health Check & Keep-Alive Endpoint (Flaw 10)
+// 5. Health Check & Keep-Alive Endpoint
 app.get('/api/health', (req, res) => {
   const isDbConnected = mongoose.connection.readyState === 1;
 
@@ -121,10 +118,24 @@ app.use('/api/admin', apiLimiter, require('./routes/adminRoutes'));
 // Centralized Error Handler
 app.use(require('./middleware/errorHandler'));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`[Parkora Server running on port ${PORT}]`);
+// 7. Synchronized Server Boot Sequence
+const startServer = async () => {
+  try {
+    // Await DB connection first before starting any jobs or listeners
+    await connectDB();
+    console.log('✓ MongoDB connection active and verified.');
 
-  // Boot automated lifecycle background worker (Flaw 4)
-  initBookingLifecycleJob();
-});
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`[Parkora Server running on port ${PORT}]`);
+
+      // Initialize background worker only after DB is ready
+      initBookingLifecycleJob();
+    });
+  } catch (error) {
+    console.error('Fatal Server Boot Error:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();

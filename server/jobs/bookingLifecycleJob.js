@@ -3,12 +3,12 @@ const Booking = require('../models/Booking');
 const ParkingEvent = require('../models/ParkingEvent');
 
 const initBookingLifecycleJob = () => {
-  // Runs every minute to handle the 15-minute cancellation window promptly
+  // Scans every minute to enforce the 15-minute cancellation window promptly
   cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
 
-      // 1. Clean up No-Shows / Unarrived Bookings (15 minutes past startTime)
+      // 1. Clean up Unarrived Bookings (15 minutes past scheduled startTime)
       const NO_SHOW_GRACE_MINUTES = 15;
       const noShowThreshold = new Date(now.getTime() - NO_SHOW_GRACE_MINUTES * 60 * 1000);
 
@@ -44,7 +44,7 @@ const initBookingLifecycleJob = () => {
         console.log(`[Lifecycle Job] Auto-cancelled ${expiredBookings.length} booking(s) exceeding 15-minute arrival window.`);
       }
 
-      // 2. Track & Flag Overstays
+      // 2. Track & Flag Overstayed Active Vehicles
       const overstayBookings = await Booking.find({
         status: 'active',
         endTime: { $lt: now },
