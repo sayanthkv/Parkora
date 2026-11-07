@@ -1,5 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User');
+const Floor = require('../models/Floor');
+const ParkingBay = require('../models/ParkingBay');
+const Booking = require('../models/Booking');
 const {
   getStaffShiftContext,
   autoSwitchToDutyStaff,
@@ -10,22 +14,41 @@ const {
   createWalkInBooking,
   getStaffTodayBookings,
 } = require('../controllers/staffController');
-const { getLocationStructure } = require('../controllers/adminController');
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
 router.use(authorize('staff', 'admin'));
 
-// Structure endpoint for staff's assigned facility
+// Returns facility structure PLUS live overlapping reservations
 router.get('/facility-structure', async (req, res, next) => {
   try {
-    const User = require('../models/User');
     const staff = await User.findById(req.user.id);
     if (!staff || !staff.assignedFacility) {
       return res.status(400).json({ success: false, message: 'No facility assigned to staff.' });
     }
-    req.params.locationId = staff.assignedFacility.toString();
-    return getLocationStructure(req, res);
+
+    const locationId = staff.assignedFacility;
+    const floors = await Floor.find({ location: locationId }).sort({ level: 1 }).lean();
+    const bays = await ParkingBay.find({ location: locationId }).sort({ bayNumber: 1 }).lean();
+
+    // Fetch all active or confirmed bookings currently occupying slots
+    const now = new Date();
+    const activeBookings = await Booking.find({
+      location: locationId,
+      status: { $in: ['active', 'confirmed'] },
+      endTime: { $gt: now },
+    })
+      .select('bay status startTime endTime vehicle')
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        floors,
+        bays,
+        activeBookings,
+      },
+    });
   } catch (err) {
     next(err);
   }
