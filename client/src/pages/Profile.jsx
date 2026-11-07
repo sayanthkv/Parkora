@@ -27,30 +27,48 @@ export default function Profile() {
   // Redirect Admin if they stumble upon profile page
   useEffect(() => {
     if (user?.role === 'admin') {
-      navigate('/admin');
+      navigate('/admin', { replace: true });
     }
   }, [user, navigate]);
 
-  // Fetch stats / staff profile specifics
+  // Sync form state if user updates
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name || '',
+        phone: user.phone || '',
+        defaultVehicle: user.vehicles?.[0]?.regNumber || user.defaultVehicle || '',
+      });
+    }
+  }, [user]);
+
+  // Fetch customer reservation history count
   useEffect(() => {
     const fetchProfileDetails = async () => {
+      // Matches both standard customer role values
+      if (!user || user.role === 'admin' || user.role === 'staff') return;
+
       setLoading(true);
       try {
-        if (user?.role === 'user') {
-          const res = await API.get('/bookings/my-bookings');
-          const bookings = res.data.data || res.data || [];
-          setBookingCount(bookings.length);
-        }
+        // Query the correct user bookings route
+        const res = await API.get('/bookings/my');
+        const bookingsList = res.data.data?.bookings || res.data.data || res.data || [];
+        setBookingCount(Array.isArray(bookingsList) ? bookingsList.length : 0);
       } catch (err) {
-        console.error('Failed to load profile details:', err);
+        // Fallback retry in case your router uses /bookings/my-bookings
+        try {
+          const fallbackRes = await API.get('/bookings/my-bookings');
+          const fallbackList = fallbackRes.data.data?.bookings || fallbackRes.data.data || fallbackRes.data || [];
+          setBookingCount(Array.isArray(fallbackList) ? fallbackList.length : 0);
+        } catch (innerErr) {
+          console.error('Failed to load reservation count:', innerErr);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    if (user) {
-      fetchProfileDetails();
-    }
+    fetchProfileDetails();
   }, [user]);
 
   const handleUpdate = async (e) => {
@@ -101,7 +119,7 @@ export default function Profile() {
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                 isStaff ? 'bg-amber-400 text-slate-950' : 'bg-emerald-400 text-slate-950'
               }`}>
-                {isStaff ? 'Staff Operator' : 'Verified User'}
+                {isStaff ? 'Staff Operator' : 'Verified Driver'}
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1">{user.email}</p>
@@ -177,9 +195,9 @@ export default function Profile() {
                   <Car className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="KL-13-AB-1234"
+                    placeholder="KL 13 AS 1234"
                     value={formData.defaultVehicle}
-                    onChange={(e) => setFormData({ ...formData, defaultVehicle: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, defaultVehicle: e.target.value.toUpperCase() })}
                     className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E] focus:bg-white uppercase"
                   />
                 </div>
@@ -231,7 +249,7 @@ export default function Profile() {
                     <Car className="w-4 h-4 text-emerald-600" /> Preferred Vehicle
                   </span>
                   <span className="font-bold text-slate-900 font-mono uppercase">
-                    {user.defaultVehicle || 'KL-13-AB-1234'}
+                    {user.vehicles?.[0]?.regNumber || user.defaultVehicle || 'KL 13 AS 1234'}
                   </span>
                 </div>
               )}
@@ -242,24 +260,34 @@ export default function Profile() {
         {/* Right Details Column (Role Specific) */}
         <div className="md:col-span-5 space-y-6">
           
-          {/* USER SPECIFIC STATS */}
+          {/* CUSTOMER SPECIFIC STATS */}
           {!isStaff && (
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
               <h2 className="text-base font-heading font-bold text-slate-900">Activity Overview</h2>
               
-              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-center">
-                <span className="text-3xl font-heading font-extrabold text-[#0B3D2E] block">{bookingCount}</span>
-                <span className="text-xs text-emerald-800 font-bold uppercase tracking-wider mt-1 block">Total Reservations</span>
+              <div className="p-5 bg-emerald-50 border border-emerald-100 rounded-2xl text-center">
+                <span className="text-4xl font-heading font-extrabold text-[#0B3D2E] block">
+                  {loading ? (
+                    <span className="inline-block animate-pulse text-2xl font-bold text-slate-400">...</span>
+                  ) : (
+                    bookingCount
+                  )}
+                </span>
+                <span className="text-xs text-emerald-800 font-bold uppercase tracking-wider mt-1.5 block">
+                  Total Reservations Made
+                </span>
               </div>
 
               <div className="pt-2 text-xs text-slate-500 space-y-2">
                 <div className="flex items-center justify-between">
                   <span>Account Status:</span>
-                  <span className="font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full text-[10px] uppercase">Active</span>
+                  <span className="font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full text-[10px] uppercase">
+                    Active Driver
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Registered Member:</span>
-                  <span className="font-semibold text-slate-800">Kannur Region</span>
+                  <span>Registered Region:</span>
+                  <span className="font-semibold text-slate-800">Kannur District</span>
                 </div>
               </div>
             </div>
@@ -277,25 +305,26 @@ export default function Profile() {
                 <div>
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Assigned Facility</span>
                   <span className="font-heading font-bold text-sm text-slate-900 block mt-0.5">
-                    {user.assignedFacility?.name || 'Kannur Railway Station Parking'}
+                    {user.assignedFacility?.name || 'Kannur Central Transit Node'}
                   </span>
                   <p className="text-slate-500 mt-0.5">
-                    {user.assignedFacility?.address?.street || 'Thavakkara'}, {user.assignedFacility?.address?.area || 'Station Road'}
+                    {user.assignedFacility?.address?.street || 'Station Road'}, {user.assignedFacility?.address?.area || 'Kannur'}
                   </p>
                 </div>
 
                 <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-3">
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-bold text-[10px] uppercase block">Shift Hours</span>
-                    <span className="font-bold text-slate-800 flex items-center gap-1 mt-1">
-                      <Clock className="w-3 h-3 text-emerald-600" /> 08:00 - 20:00
+                    <span className="text-slate-400 font-bold text-[10px] uppercase block">Assigned Shift</span>
+                    <span className="font-extrabold uppercase text-slate-800 flex items-center gap-1 mt-1">
+                      <Clock className="w-3 h-3 text-emerald-600" />
+                      {user.shiftSlot ? user.shiftSlot.replace('_', ' ') : 'Shift 1'}
                     </span>
                   </div>
 
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <span className="text-slate-400 font-bold text-[10px] uppercase block">Status</span>
                     <span className="font-bold text-emerald-700 flex items-center gap-1 mt-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> On Duty
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Active Operator
                     </span>
                   </div>
                 </div>

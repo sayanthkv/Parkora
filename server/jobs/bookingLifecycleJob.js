@@ -3,12 +3,13 @@ const Booking = require('../models/Booking');
 const ParkingEvent = require('../models/ParkingEvent');
 
 const initBookingLifecycleJob = () => {
-  cron.schedule('*/5 * * * *', async () => {
+  // Runs every minute to handle the 15-minute cancellation window promptly
+  cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
 
-      // 1. Clean up No-Shows (30 mins past startTime)
-      const NO_SHOW_GRACE_MINUTES = 30;
+      // 1. Clean up No-Shows / Unarrived Bookings (15 minutes past startTime)
+      const NO_SHOW_GRACE_MINUTES = 15;
       const noShowThreshold = new Date(now.getTime() - NO_SHOW_GRACE_MINUTES * 60 * 1000);
 
       const expiredBookings = await Booking.find({
@@ -21,24 +22,26 @@ const initBookingLifecycleJob = () => {
           { _id: b._id },
           {
             $set: {
-              status: 'no_show',
+              status: 'cancelled',
               cancelledAt: now,
               cancellationReason: `Automated cleanup: Customer failed to check in within the ${NO_SHOW_GRACE_MINUTES}-minute grace window.`,
             },
           }
         );
 
-        await ParkingEvent.create({
-          booking: b._id,
-          location: b.location,
-          eventType: 'OVERSTAY_FLAGGED',
-          notes: `Marked as NO_SHOW by automated lifecycle job. Scheduled start was ${b.startTime.toISOString()}.`,
-          staff: b.user,
-        });
+        if (ParkingEvent) {
+          await ParkingEvent.create({
+            booking: b._id,
+            location: b.location,
+            eventType: 'CANCELLATION',
+            notes: `Auto-cancelled after exceeding ${NO_SHOW_GRACE_MINUTES}-minute arrival threshold. Scheduled start was ${b.startTime.toISOString()}.`,
+            staff: b.user,
+          });
+        }
       }
 
       if (expiredBookings.length > 0) {
-        console.log(`[Lifecycle Job] Marked ${expiredBookings.length} booking(s) as no_show.`);
+        console.log(`[Lifecycle Job] Auto-cancelled ${expiredBookings.length} booking(s) exceeding 15-minute arrival window.`);
       }
 
       // 2. Track & Flag Overstays
@@ -54,13 +57,15 @@ const initBookingLifecycleJob = () => {
           { $set: { isOverstay: true } }
         );
 
-        await ParkingEvent.create({
-          booking: b._id,
-          location: b.location,
-          eventType: 'OVERSTAY_FLAGGED',
-          notes: `Vehicle ${b.vehicle?.regNumber || 'N/A'} exceeded scheduled end time (${b.endTime.toISOString()}). Flagged for staff overstay charge.`,
-          staff: b.user,
-        });
+        if (ParkingEvent) {
+          await ParkingEvent.create({
+            booking: b._id,
+            location: b.location,
+            eventType: 'OVERSTAY_FLAGGED',
+            notes: `Vehicle ${b.vehicle?.regNumber || 'N/A'} exceeded scheduled end time (${b.endTime.toISOString()}).`,
+            staff: b.user,
+          });
+        }
       }
 
       if (overstayBookings.length > 0) {
@@ -71,7 +76,7 @@ const initBookingLifecycleJob = () => {
     }
   });
 
-  console.log(' Booking lifecycle worker initialized (runs every 5 minutes).');
+  console.log('✓ Booking lifecycle worker initialized (runs every 1 minute with 15-min auto-cancellation).');
 };
 
 module.exports = initBookingLifecycleJob;
