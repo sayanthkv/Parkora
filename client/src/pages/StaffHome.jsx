@@ -34,7 +34,12 @@ export default function StaffHome() {
   }, []);
 
   const facility = shiftContext?.facility || user?.assignedFacility;
-  const isOnDuty = shiftContext?.isOnDuty ?? true;
+  // Strict boolean check: defaults to false while loading
+  const isOnDuty = Boolean(shiftContext?.isOnDuty);
+
+  // User's personal schedule vs facility's current active schedule
+  const personalSchedule = shiftContext?.personalShiftLabel || (user?.shiftSlot === 'shift_2' ? 'Shift 2: 18:00 – 06:00 IST' : 'Shift 1: 06:00 – 18:00 IST');
+  const currentActiveSchedule = shiftContext?.shiftInfo?.label || 'Shift 1: 06:00 – 18:00 IST';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pt-28 pb-16 font-body">
@@ -50,20 +55,22 @@ export default function StaffHome() {
               Welcome, {user?.name || 'Operator'}
             </h1>
             <p className="text-xs text-emerald-100 mt-1 max-w-xl">
-              Assigned Facility: <strong className="text-white">{facility?.name || 'Kannur Central Node'}</strong> &bull; {facility?.address?.street}, {facility?.address?.area}
+              Assigned Facility: <strong className="text-white">{facility?.name || 'Kannur Central Bus Terminal'}</strong> &bull; {facility?.address?.street || 'Thavakkara Road'}, {facility?.address?.area || 'Thavakkara'}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className={`px-3 py-1.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 ${
-              isOnDuty ? 'bg-emerald-500 text-slate-950' : 'bg-amber-400 text-slate-950'
+            <span className={`px-3.5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm ${
+              isOnDuty 
+                ? 'bg-emerald-400 text-slate-950 font-black' 
+                : 'bg-amber-400 text-slate-950 font-bold'
             }`}>
               <Clock className="w-4 h-4" />
-              {isOnDuty ? 'You Are On Duty' : 'Off Current Duty Window'}
+              {isOnDuty ? 'You Are on Duty' : 'Off Current Duty Window'}
             </span>
             <button
               onClick={fetchStaffData}
-              className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all cursor-pointer"
+              className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
               title="Refresh Stats"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -96,14 +103,27 @@ export default function StaffHome() {
             </div>
           </div>
 
+          {/* Detailed Shift Card */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Shift Schedule</span>
-              <span className="text-sm font-extrabold text-slate-800 block mt-1">
-                {shiftContext?.shiftInfo?.label || '06:00 – 18:00 IST'}
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                Your Assigned Schedule
+              </span>
+              <span className="text-sm font-extrabold text-slate-900 block mt-1">
+                {personalSchedule}
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider block mt-0.5 ${
+                isOnDuty ? 'text-emerald-700' : 'text-amber-700'
+              }`}>
+                {isOnDuty 
+                  ? '• Currently on active duty' 
+                  : `• Off duty (Active shift: ${currentActiveSchedule.split(':')[0]})`
+                }
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+              isOnDuty ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+            }`}>
               <Activity className="w-5 h-5" />
             </div>
           </div>
@@ -124,7 +144,7 @@ export default function StaffHome() {
                   <PlusCircle className="w-6 h-6" />
                 </div>
                 <h3 className="text-lg font-heading font-extrabold text-slate-900 group-hover:text-[#0B3D2E] transition-colors">
-                  Book For Customer
+                  Book for Customer
                 </h3>
                 <p className="text-xs text-slate-500 mt-2 font-medium leading-relaxed">
                   Reserve and check in on-the-spot walk-in vehicles directly into open bays at {facility?.name || 'your lot'}.

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import API from '../api/axios';
 import {
   QrCode, Search, CheckCircle2, XCircle, Clock,
-  Car, User, ShieldCheck, ArrowRight, AlertTriangle, RefreshCw, Activity, ArrowLeftRight, Building
+  Car, User, ShieldCheck, ArrowRight, AlertTriangle, RefreshCw, Activity, ArrowLeftRight, Building, Check, ToggleLeft, ToggleRight
 } from 'lucide-react';
 
 export default function StaffPortal() {
@@ -15,10 +15,12 @@ export default function StaffPortal() {
   const [verificationResult, setVerificationResult] = useState(null);
   const [todayOverview, setTodayOverview] = useState(null);
   const [shiftContext, setShiftContext] = useState(null);
+  const [autoCompleteEnabled, setAutoCompleteEnabled] = useState(false);
 
   const [loadingVerify, setLoadingVerify] = useState(false);
   const [loadingAction, setLoadingAction] = useState(false);
   const [loadingOverview, setLoadingOverview] = useState(true);
+  const [togglingAuto, setTogglingAuto] = useState(false);
   const [switchingDuty, setSwitchingDuty] = useState(false);
   const [error, setError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
@@ -32,12 +34,14 @@ export default function StaffPortal() {
   const fetchStaffData = async () => {
     setLoadingOverview(true);
     try {
-      const [overviewRes, shiftRes] = await Promise.all([
+      const [overviewRes, shiftRes, autoRes] = await Promise.all([
         API.get('/staff/today'),
         API.get('/staff/shift-context'),
+        API.get('/staff/auto-complete-status').catch(() => ({ data: { enabled: false } })),
       ]);
       setTodayOverview(overviewRes.data.data);
       setShiftContext(shiftRes.data.data);
+      setAutoCompleteEnabled(autoRes.data.enabled);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load staff gate context.');
     } finally {
@@ -48,6 +52,20 @@ export default function StaffPortal() {
   useEffect(() => {
     fetchStaffData();
   }, []);
+
+  const handleToggleAutoComplete = async () => {
+    setTogglingAuto(true);
+    try {
+      const res = await API.post('/staff/toggle-auto-complete');
+      setAutoCompleteEnabled(res.data.enabled);
+      setActionSuccess(res.data.message);
+      fetchStaffData();
+    } catch (err) {
+      setError('Could not update auto-complete setting.');
+    } finally {
+      setTogglingAuto(false);
+    }
+  };
 
   const handleAutoSwitchDuty = async () => {
     setSwitchingDuty(true);
@@ -86,7 +104,6 @@ export default function StaffPortal() {
       const errData = err.response?.data;
       const errorMsg = errData?.message || 'Verification lookup failed.';
       setError(errorMsg);
-      // If server returned booking details along with the rejection, display them with isValid: false
       if (errData?.data) {
         setVerificationResult({
           isValid: false,
@@ -137,7 +154,7 @@ export default function StaffPortal() {
       setVerificationResult((prev) => ({
         ...prev,
         isValid: true,
-        message: 'Vehicle checked out & departure finalized.',
+        message: res.data.message,
         data: {
           ...prev?.data,
           ...res.data.data,
@@ -155,8 +172,9 @@ export default function StaffPortal() {
     }
   };
 
-  const isOnDuty = shiftContext?.isOnDuty ?? true;
-  const currentShiftLabel = shiftContext?.shiftInfo?.label || 'Active Shift';
+  const isOnDuty = Boolean(shiftContext?.isOnDuty);
+  const personalSchedule = shiftContext?.personalShiftLabel || 'Shift 1: 06:00 – 18:00 IST';
+  const activeShiftLabel = shiftContext?.shiftInfo?.label || 'Shift 1: 06:00 – 18:00 IST';
 
   const bookingData = verificationResult?.data;
   const facilityName =
@@ -180,28 +198,46 @@ export default function StaffPortal() {
     ? new Date(bookingData.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
     : '--:--';
 
+  // Overstay calculations (with strict 7-minute grace window)
+  const now = new Date();
+  const endTime = bookingData?.endTime ? new Date(bookingData.endTime) : null;
+  const overstayMinutes = (bookingData?.status === 'active' && endTime)
+    ? Math.floor((now.getTime() - endTime.getTime()) / (60 * 1000))
+    : 0;
+
+  const isOverstay = overstayMinutes > 7;
+  const extraHours = isOverstay ? Math.ceil(overstayMinutes / 60) : 0;
+  const hourlyRate = bookingData?.bay?.customHourlyRate ?? bookingData?.location?.pricing?.hourlyRate ?? 20;
+  const penaltyRupees = isOverstay ? extraHours * hourlyRate : 0;
+
   return (
     <div className="min-h-screen bg-white text-slate-900 pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6 font-body">
       
       {/* Shift Banner & Handover Control */}
-      <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${
-        isOnDuty ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-900'
+      <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm ${
+        isOnDuty ? 'bg-emerald-50 border-emerald-200 text-emerald-950' : 'bg-amber-50 border-amber-300 text-amber-950'
       }`}>
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl text-white font-bold ${isOnDuty ? 'bg-[#0B3D2E]' : 'bg-amber-600'}`}>
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className={`p-2.5 rounded-xl text-white font-bold shrink-0 ${isOnDuty ? 'bg-[#0B3D2E]' : 'bg-amber-600'}`}>
             <Activity className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-heading font-extrabold text-sm">{currentShiftLabel}</span>
-              <span className={`px-2 py-0.2 rounded text-[10px] font-bold uppercase ${
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-heading font-extrabold text-sm sm:text-base">
+                Your Time Schedule: <span className="underline decoration-2">{personalSchedule}</span>
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                 isOnDuty ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
               }`}>
                 {isOnDuty ? 'YOU ARE CURRENTLY ON DUTY' : 'DIFFERENT SHIFT ACTIVE'}
               </span>
             </div>
-            <p className="text-xs opacity-80 mt-0.5">
-              Facility: <strong>{shiftContext?.facility?.name || 'Assigned Facility'}</strong> &bull; Scheduled Operator: <strong>{shiftContext?.onDutyStaff?.name || 'Designated Staff'}</strong>
+            
+            <p className="text-xs opacity-90 mt-1">
+              Stationed Facility: <strong>{shiftContext?.facility?.name || 'Assigned Facility'}</strong> 
+              {!isOnDuty && (
+                <span> &bull; Currently Active on Site: <strong>{activeShiftLabel}</strong> (Assigned Operator: <strong>{shiftContext?.onDutyStaff?.name || 'Designated Colleague'}</strong>)</span>
+              )}
             </p>
           </div>
         </div>
@@ -210,7 +246,7 @@ export default function StaffPortal() {
           <button
             onClick={handleAutoSwitchDuty}
             disabled={switchingDuty}
-            className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+            className="px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 whitespace-nowrap self-start md:self-auto"
           >
             <ArrowLeftRight className="w-3.5 h-3.5 text-white" />
             {switchingDuty ? 'Switching Duty...' : 'Auto-Switch to On-Duty Staff'}
@@ -218,7 +254,7 @@ export default function StaffPortal() {
         )}
       </div>
 
-      {/* Main Terminal Header */}
+      {/* Main Terminal Header with Test Simulation Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
@@ -226,17 +262,34 @@ export default function StaffPortal() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">Access Gate & Verification Terminal</h1>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Gate Arrival Window: <strong>5 mins before start time</strong> up to <strong>15 mins after start time</strong> (unclaimed slots auto-cancel at 15 mins).
+            Exit Protocol: <strong>7-minute grace period</strong> on departure. Overstay past 7 mins incurs an hourly overtime charge.
           </p>
         </div>
 
-        <button
-          onClick={fetchStaffData}
-          className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-900 px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 text-[#0B3D2E] ${loadingOverview ? 'animate-spin' : ''}`} />
-          Refresh Status
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Simulation Toggle Switch */}
+          <button
+            onClick={handleToggleAutoComplete}
+            disabled={togglingAuto}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-sm active:scale-95 ${
+              autoCompleteEnabled
+                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+            }`}
+            title="Auto-completes parking session when scheduled duration expires"
+          >
+            {autoCompleteEnabled ? <ToggleRight className="w-4 h-4 text-emerald-700" /> : <ToggleLeft className="w-4 h-4 text-slate-400" />}
+            Auto-Discharge on Expiry: {autoCompleteEnabled ? 'ON' : 'OFF'}
+          </button>
+
+          <button
+            onClick={fetchStaffData}
+            className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-900 px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#0B3D2E] ${loadingOverview ? 'animate-spin' : ''}`} />
+            Refresh Status
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -286,7 +339,6 @@ export default function StaffPortal() {
               </div>
             )}
 
-            {/* Verification Result Card */}
             {bookingData && (
               <div className={`p-6 rounded-2xl border ${verificationResult?.isValid ? 'bg-slate-50 border-slate-200' : 'bg-red-50 border-red-200'} space-y-4 shadow-sm`}>
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200">
@@ -305,7 +357,34 @@ export default function StaffPortal() {
                   </span>
                 </div>
 
-                {/* Persistent Data Grid */}
+                {/* Overstay Warning Banner */}
+                {bookingData.status === 'active' && (
+                  <div className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${
+                    isOverstay
+                      ? 'bg-red-50 border-red-300 text-red-900'
+                      : overstayMinutes > 0
+                      ? 'bg-amber-50 border-amber-200 text-amber-900'
+                      : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 shrink-0" />
+                      <span>
+                        {isOverstay
+                          ? `Overstayed by ${overstayMinutes} mins (${extraHours}h billable at ₹${hourlyRate}/h)`
+                          : overstayMinutes > 0
+                          ? `Within 7-min grace window (${overstayMinutes} mins past slot). No penalty.`
+                          : 'Vehicle is within scheduled parking window.'}
+                      </span>
+                    </div>
+                    {isOverstay && (
+                      <span className="font-bold text-sm bg-red-200 text-red-950 px-2.5 py-0.5 rounded-lg">
+                        +₹{penaltyRupees} Due
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Data Grid */}
                 <div className="grid grid-cols-2 gap-4 text-xs font-medium">
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Facility Location</span>
@@ -348,13 +427,13 @@ export default function StaffPortal() {
                       <Clock className="w-3.5 h-3.5 text-[#0B3D2E]" /> Scheduled Slot: {formattedStartTime} – {formattedEndTime} IST
                     </span>
                     <span className="font-bold text-slate-900">
-                      Amount: ₹{(bookingData.pricingSnapshot?.totalAmountPaise ? bookingData.pricingSnapshot.totalAmountPaise / 100 : bookingData.pricingSnapshot?.totalAmount) || 0}
+                      Amount Paid: ₹{(bookingData.pricingSnapshot?.totalAmountPaise ? bookingData.pricingSnapshot.totalAmountPaise / 100 : bookingData.pricingSnapshot?.totalAmount) || 0}
                     </span>
                   </div>
                 </div>
 
                 {/* Gate Action Buttons */}
-                <div className="pt-3 border-t border-slate-200 flex gap-3">
+                <div className="pt-3 border-t border-slate-200">
                   {bookingData.status === 'confirmed' && (
                     <button
                       onClick={() => handleCheckIn(bookingData._id)}
@@ -370,10 +449,14 @@ export default function StaffPortal() {
                     <button
                       onClick={() => handleCheckOut(bookingData._id)}
                       disabled={loadingAction}
-                      className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+                      className={`w-full py-3.5 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 text-white ${
+                        isOverstay 
+                          ? 'bg-amber-700 hover:bg-amber-800' 
+                          : 'bg-[#0B3D2E] hover:bg-[#145C43]'
+                      }`}
                     >
-                      {loadingAction ? 'Finalizing Exit...' : 'Complete Checkout & Payment'}
-                      <CheckCircle2 className="w-4 h-4 text-[#F2B705]" />
+                      {loadingAction ? 'Finalizing Exit...' : isOverstay ? `Collect ₹${penaltyRupees} Overstay & Exit` : 'Complete Checkout (No Extra Fee)'}
+                      <Check className="w-4 h-4 text-[#F2B705]" />
                     </button>
                   )}
                 </div>

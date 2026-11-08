@@ -110,7 +110,7 @@ const Home = () => {
             Parkora Smart Parking
           </h1>
           <p className="text-base sm:text-xl text-slate-200 max-w-2xl mx-auto font-normal leading-relaxed">
-            Pre-book guaranteed parking bays across Kannur public stations, transit hubs, and coastal destinations[cite: 2].
+            Pre-book guaranteed parking bays across Kannur public stations, transit hubs, and coastal destinations.
           </p>
           <div className="pt-3">
             <button
@@ -146,7 +146,7 @@ const Home = () => {
                 <CountUpNumber end={200} suffix="+" duration={900} />
               </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Active Parking Bays</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Railway Station, KSRTC Stand, and Beach complexes in Kannur[cite: 2].</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Railway Station, KSRTC Stand, and Beach complexes in Kannur.</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
@@ -154,7 +154,7 @@ const Home = () => {
                 <CountUpNumber end={100} suffix="%" duration={900} />
               </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Real-Time Guarantee</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Non-overlapping interval calculations validated server-side[cite: 2, 6].</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Non-overlapping interval calculations validated server-side.</p>
             </div>
 
             <div className="text-center px-4 pt-4 md:pt-0">
@@ -162,7 +162,7 @@ const Home = () => {
                 <CountUpNumber end={4} padZero duration={750} />
               </h2>
               <h3 className="font-heading font-bold text-base text-slate-800 mt-2">Major Transit Hubs</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Instant gate check-in via digital QR pass scanning[cite: 2, 6].</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Instant gate check-in via digital QR pass scanning.</p>
             </div>
           </div>
         </motion.div>
@@ -242,7 +242,7 @@ const Home = () => {
                       ) : (
                         <span className="inline-flex items-center gap-1.5 text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 font-bold text-[11px]">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          24/7 Gate Access[cite: 2]
+                          24/7 Gate Access
                         </span>
                       )}
 

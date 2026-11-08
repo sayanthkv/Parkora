@@ -16,10 +16,29 @@ const {
 } = require('../controllers/staffController');
 const { protect, authorize } = require('../middleware/auth');
 
+// Global memory toggle for test simulation
+global.autoCompleteOverstays = global.autoCompleteOverstays || false;
+
 router.use(protect);
 router.use(authorize('staff', 'admin'));
 
-// Returns facility structure PLUS live overlapping reservations
+// Testing mode: toggle and inspect auto-discharge status
+router.get('/auto-complete-status', (req, res) => {
+  res.status(200).json({ success: true, enabled: Boolean(global.autoCompleteOverstays) });
+});
+
+router.post('/toggle-auto-complete', (req, res) => {
+  global.autoCompleteOverstays = !global.autoCompleteOverstays;
+  res.status(200).json({
+    success: true,
+    enabled: global.autoCompleteOverstays,
+    message: global.autoCompleteOverstays
+      ? 'Auto-discharge enabled: cars will be auto-completed when reserved time ends.'
+      : 'Auto-discharge disabled: manual staff verification required at exit.',
+  });
+});
+
+// Facility layout and live active bay reservations
 router.get('/facility-structure', async (req, res, next) => {
   try {
     const staff = await User.findById(req.user.id);
@@ -31,7 +50,6 @@ router.get('/facility-structure', async (req, res, next) => {
     const floors = await Floor.find({ location: locationId }).sort({ level: 1 }).lean();
     const bays = await ParkingBay.find({ location: locationId }).sort({ bayNumber: 1 }).lean();
 
-    // Fetch all active or confirmed bookings currently occupying slots
     const now = new Date();
     const activeBookings = await Booking.find({
       location: locationId,

@@ -3,7 +3,7 @@ const Booking = require('../models/Booking');
 const ParkingEvent = require('../models/ParkingEvent');
 
 const initBookingLifecycleJob = () => {
-  // Scans every minute to enforce the 15-minute cancellation window promptly
+  // Scans every minute for automatic lifecycle events
   cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
@@ -71,12 +71,47 @@ const initBookingLifecycleJob = () => {
       if (overstayBookings.length > 0) {
         console.log(`[Lifecycle Job] Flagged ${overstayBookings.length} active session(s) as overstay.`);
       }
+
+      // 3. Testing Auto-Complete: Auto-discharge vehicles when reserved time ends
+      if (global.autoCompleteOverstays) {
+        const expiredActiveSessions = await Booking.find({
+          status: 'active',
+          endTime: { $lte: now },
+        });
+
+        for (const session of expiredActiveSessions) {
+          await Booking.updateOne(
+            { _id: session._id },
+            {
+              $set: {
+                status: 'completed',
+                actualCheckOutTime: session.endTime,
+                amountCollectedPaise: session.amountCollectedPaise || session.pricingSnapshot?.totalAmountPaise || 0,
+              },
+            }
+          );
+
+          if (ParkingEvent) {
+            await ParkingEvent.create({
+              booking: session._id,
+              location: session.location,
+              eventType: 'DEPARTURE',
+              notes: `Auto-completed via simulation toggle. Vehicle ${session.vehicle?.regNumber || 'N/A'} vacated bay upon slot expiry.`,
+              staff: session.user,
+            });
+          }
+        }
+
+        if (expiredActiveSessions.length > 0) {
+          console.log(`[Lifecycle Test Simulation] Auto-discharged ${expiredActiveSessions.length} vehicle(s) whose slot ended.`);
+        }
+      }
     } catch (error) {
       console.error('[Lifecycle Job Error]:', error.message);
     }
   });
 
-  console.log('✓ Booking lifecycle worker initialized (runs every 1 minute with 15-min auto-cancellation).');
+  console.log('✓ Booking lifecycle worker initialized (runs every 1 minute with 15-min auto-cancellation & simulation toggle support).');
 };
 
 module.exports = initBookingLifecycleJob;

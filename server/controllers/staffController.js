@@ -3,7 +3,7 @@ const ParkingLocation = require('../models/ParkingLocation');
 const ParkingBay = require('../models/ParkingBay');
 const User = require('../models/User');
 const StaffActivityLog = require('../models/StaffActivityLog');
-const { getActiveShiftDetails } = require('../utils/shiftHelper');
+const { getActiveShiftDetails, getFacilityShiftRoster } = require('../utils/shiftHelper');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
@@ -28,14 +28,24 @@ exports.getStaffShiftContext = async (req, res) => {
 
     const facility = currentStaff.assignedFacility;
     const shiftInfo = getActiveShiftDetails(facility.name);
+    const roster = getFacilityShiftRoster(facility.name);
 
+    // Normalize user's assigned slot (e.g. 'shift_1' or 'shift_2')
+    const userSlot = (currentStaff.shiftSlot || 'shift_1').toLowerCase();
+    const personalShiftLabel = roster[userSlot] || roster.shift_1;
+
+    // Strict boolean verification: Staff is on duty IF AND ONLY IF their personal slot matches the facility's active slot
+    const isOnDuty = Boolean(shiftInfo.activeSlot && userSlot === shiftInfo.activeSlot);
+
+    // Find whichever staff member is officially rostered for the facility's currently active shift
     const onDutyStaff = await User.findOne({
       assignedFacility: facility._id,
       shiftSlot: shiftInfo.activeSlot,
       isActive: true,
     }).select('-passwordHash');
 
-    if (currentStaff.shiftSlot === shiftInfo.activeSlot) {
+    // Auto-record session initialization only when this staff member is legitimately on duty
+    if (isOnDuty) {
       const recentLog = await StaffActivityLog.findOne({
         staff: currentStaff._id,
         facility: facility._id,
@@ -59,9 +69,10 @@ exports.getStaffShiftContext = async (req, res) => {
       data: {
         facility,
         shiftInfo,
+        personalShiftLabel, // Personal schedule (e.g. "Shift 1: 06:00 – 18:00 IST")
         currentStaff,
         onDutyStaff,
-        isOnDuty: currentStaff.shiftSlot === shiftInfo.activeSlot,
+        isOnDuty, // Strict Boolean check (never undefined or ambiguous)
       },
     });
   } catch (error) {
@@ -69,7 +80,7 @@ exports.getStaffShiftContext = async (req, res) => {
   }
 };
 
-// @desc    Switch to the on-duty staff member automatically
+// @desc    Switch to the on-duty staff member automatically (presentation helper)
 // @route   POST /api/staff/auto-switch-duty
 // @access  Private (Staff, Admin)
 exports.autoSwitchToDutyStaff = async (req, res) => {
@@ -348,13 +359,13 @@ exports.checkIn = async (req, res) => {
   }
 };
 
-// @desc    Check-Out vehicle
+// @desc    Check-Out vehicle with 7-minute grace period & overtime fee calculation
 // @route   POST /api/staff/check-out/:bookingId
 // @access  Private (Staff)
 exports.checkOut = async (req, res) => {
   try {
     const staff = await User.findById(req.user.id);
-    const booking = await Booking.findById(req.params.bookingId);
+    const booking = await populateBookingRecord(Booking.findById(req.params.bookingId));
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found.' });
@@ -364,35 +375,62 @@ exports.checkOut = async (req, res) => {
       return res.status(400).json({ success: false, message: `Cannot check out booking with status '${booking.status}'.` });
     }
 
+    const now = new Date();
+    const endTime = new Date(booking.endTime);
+    const overstayMinutes = Math.floor((now.getTime() - endTime.getTime()) / (60 * 1000));
+
+    let overstayFeeRupees = 0;
+    let extraHoursBilled = 0;
+
+    // 7-minute grace threshold
+    if (overstayMinutes > 7) {
+      extraHoursBilled = Math.ceil(overstayMinutes / 60);
+      const hourlyRate = booking.bay?.customHourlyRate ?? booking.location?.pricing?.hourlyRate ?? 20;
+      overstayFeeRupees = extraHoursBilled * hourlyRate;
+    }
+
+    const overstayFeePaise = Math.round(overstayFeeRupees * 100);
+    const totalCollectedPaise = (booking.amountCollectedPaise || 0) + overstayFeePaise;
+
     booking.status = 'completed';
-    booking.actualCheckOutTime = new Date();
-    booking.paymentStatus = 'paid';
-    booking.amountCollectedPaise =
-      booking.pricingSnapshot?.totalAmountPaise ||
-      (booking.pricingSnapshot?.totalAmount ? booking.pricingSnapshot.totalAmount * 100 : 4000);
+    booking.actualCheckOutTime = now;
+    booking.amountCollectedPaise = totalCollectedPaise;
+    if (overstayFeeRupees > 0) {
+      booking.isOverstay = true;
+      booking.overstayDetails = {
+        minutes: overstayMinutes,
+        extraHours: extraHoursBilled,
+        feePaise: overstayFeePaise,
+      };
+    }
     await booking.save();
 
     await StaffActivityLog.create({
       staff: staff._id,
-      facility: booking.location,
+      facility: booking.location._id,
       actionType: 'vehicle_checkout',
       shiftSlot: staff.shiftSlot || 'shift_1',
-      details: `Vehicle ${booking.vehicle?.regNumber} checked out. Fee finalized.`,
+      details: `Vehicle ${booking.vehicle?.regNumber} checked out. Overstay: ${overstayMinutes > 7 ? `${overstayMinutes}m (+₹${overstayFeeRupees})` : 'Within 7m grace'}.`,
     });
-
-    const populated = await populateBookingRecord(Booking.findById(booking._id));
 
     res.status(200).json({
       success: true,
-      message: 'Vehicle checked out & departure finalized.',
-      data: populated,
+      message: overstayFeeRupees > 0 
+        ? `Departure finalized. ₹${overstayFeeRupees} overstay fee collected (${overstayMinutes} mins past slot).`
+        : 'Departure finalized within allowable grace period. No extra fee.',
+      data: booking,
+      overstay: {
+        minutes: overstayMinutes,
+        graceAllowed: overstayMinutes <= 7,
+        feeRupees: overstayFeeRupees,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Staff creates an on-spot bay booking for a walk-in customer (locked to staff's facility)
+// @desc    Staff creates an on-spot bay booking for a walk-in customer with immediate payment
 // @route   POST /api/staff/book-customer
 // @access  Private (Staff)
 exports.createWalkInBooking = async (req, res) => {
@@ -410,10 +448,13 @@ exports.createWalkInBooking = async (req, res) => {
     const {
       bayId,
       floorId,
+      customerName,
+      customerPhone,
       customerEmail,
       vehicleRegNumber,
       vehicleType,
       durationHours,
+      paymentMethod = 'cash',
     } = req.body;
 
     const facility = await ParkingLocation.findById(staff.assignedFacility).session(session);
@@ -479,6 +520,18 @@ exports.createWalkInBooking = async (req, res) => {
       if (existingCust) targetUserId = existingCust._id;
     }
 
+    // Schema Enum Guard: Dynamically inspect Booking schema's enum allowed values
+    const allowedPaymentEnums = Booking.schema.path('paymentMethod')?.enumValues || ['pay_at_facility', 'razorpay'];
+    let safePaymentMethod = 'pay_at_facility';
+
+    if (allowedPaymentEnums.includes(paymentMethod)) {
+      safePaymentMethod = paymentMethod;
+    } else if (allowedPaymentEnums.includes('pay_at_facility')) {
+      safePaymentMethod = 'pay_at_facility';
+    } else {
+      safePaymentMethod = allowedPaymentEnums[0];
+    }
+
     const [booking] = await Booking.create(
       [
         {
@@ -501,9 +554,9 @@ exports.createWalkInBooking = async (req, res) => {
             durationHours: parsedDuration,
             totalAmountPaise,
           },
-          paymentStatus: 'pending',
-          paymentMethod: 'pay_at_facility',
-          amountCollectedPaise: 0,
+          paymentStatus: 'paid', // Immediately settled via Cash or Test UPI
+          paymentMethod: safePaymentMethod,
+          amountCollectedPaise: totalAmountPaise,
           qrTokenHash,
           bookedByStaff: staff._id,
         },
@@ -511,6 +564,7 @@ exports.createWalkInBooking = async (req, res) => {
       { session }
     );
 
+    // Audit log stores the exact staff settlement mode (cash or upi_qr)
     await StaffActivityLog.create(
       [
         {
@@ -518,7 +572,7 @@ exports.createWalkInBooking = async (req, res) => {
           facility: facility._id,
           actionType: 'qr_check_in',
           shiftSlot: staff.shiftSlot || 'shift_1',
-          details: `Walk-in registration: Booked Bay ${bay.bayNumber} for ${vehicleRegNumber}`,
+          details: `Walk-in pass issued (${paymentMethod.toUpperCase()}): Bay ${bay.bayNumber} for ${vehicleRegNumber} (Fee: ₹${totalAmountPaise / 100})`,
         },
       ],
       { session }
@@ -538,6 +592,7 @@ exports.createWalkInBooking = async (req, res) => {
       message: 'Walk-in booking created and vehicle checked in.',
       data: {
         ...populated,
+        paymentMethod: paymentMethod, // Return human-readable label to frontend
         qrTicketPayload: `${bookingRef}:${rawToken}`,
       },
     });

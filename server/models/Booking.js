@@ -77,7 +77,7 @@ const bookingSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['pay_at_facility', 'razorpay'],
+      enum: ['pay_at_facility', 'razorpay', 'cash', 'upi_qr'],
       default: 'pay_at_facility',
     },
     amountCollectedPaise: {
