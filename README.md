@@ -1,4 +1,4 @@
-<div align="center">
+
 
 # 🅿️ Parkora
 
@@ -6,17 +6,6 @@
 
 A full-stack parking management platform that connects **drivers**, **gate staff**, and **city administrators** through isolated, role-scoped portals, built for high-traffic transit hubs in Kannur, Kerala.
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-parkora--kannur.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://parkora-kannur.vercel.app)
-
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
-![Express](https://img.shields.io/badge/Express-000000?logo=express&logoColor=white)
-![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
-![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)
-
-</div>
 
 ---
 
@@ -36,37 +25,23 @@ Most parking apps stop at the driver's booking screen. Parkora is an end-to-end,
 
 ## Table of Contents
 
-- [Multi-Portal Architecture](#multi-portal-architecture)
-- [Features by Role](#features-by-role)
-- [Operational Rules & Timing Thresholds](#operational-rules--timing-thresholds)
-- [Demo Credentials](#demo-credentials)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [API Reference](#api-reference)
-- [Deployment](#deployment)
-- [Author](#author)
+- [Multi-Portal Architecture]
+- [Features by Role]
+- [Operational Rules & Timing Thresholds]
+- [Demo Credentials]
+- [Tech Stack]
+- [Project Structure]
+- [Getting Started]
+- [Environment Variables]
+- [API Reference]
+- [Deployment]
+- [Author]
 
-<!--
-## Screenshots
-Add screenshots or a demo GIF here, for example:
-![Customer booking flow](docs/screenshots/booking.png)
-![Staff gate terminal](docs/screenshots/staff.png)
-![Admin dashboard](docs/screenshots/admin.png)
--->
 
 ## Multi-Portal Architecture
 
 Parkora enforces strict **Role-Based Access Control (RBAC)** on both the client routing layer (`ProtectedRoute.jsx`) and the backend Express middleware (`protect`, `authorize`).
 
-```mermaid
-flowchart TD
-    Router["Parkora Access Router<br/>JWT + RBAC"]
-    Router --> Customer["Customer Storefront<br/>Hub Explorer · Bay Selector · QR Pass"]
-    Router --> Staff["Duty Staff Station<br/>Gate Verify · Walk-In Desk · Overstay Clearance"]
-    Router --> Admin["Administrator Console<br/>Telemetry · Facility Builder · Dual Shifts"]
-```
 
 - **Strict path isolation:** Staff cannot browse consumer catalogs (`/locations`). Customers cannot reach gate controls (`/staff/*`) or configuration (`/admin/*`).
 - **Silent route bouncing:** A role mismatch redirects the user straight to their authorized dashboard, with no browser alerts.
@@ -112,9 +87,6 @@ flowchart TD
 | **Exit grace** | `exit ≤ end + 7 min` | Departure finalized with no penalty |
 | **Overtime penalty** | `exit > end + 7 min` | Surcharge billed (formula below) |
 
-$$
-\text{Overstay Fee (₹)} = \left\lceil \frac{\text{Overstay Minutes}}{60} \right\rceil \times \text{Hourly Rate}
-$$
 
 A `node-cron` background worker sweeps every 60 seconds to cancel no-shows and advance booking lifecycle states.
 
@@ -124,10 +96,10 @@ Pre-seeded accounts for exploring each role-isolated portal:
 
 | Role | Email | Password | Access |
 | --- | --- | --- | --- |
-| System Admin | `admin@parkora.in` | `Admin@123` | Global metrics, facility builder, shift rosters |
-| Duty Staff (Shift 1) | `staff1@parkora.in` | `Staff@123` | Kannur Central Bus Terminal, 06:00 – 18:00 IST |
-| Duty Staff (Shift 2) | `staff2@parkora.in` | `Staff@123` | Kannur Central Bus Terminal, 18:00 – 06:00 IST |
-| Customer | `customer@parkora.in` | `Customer@123` | Hub search, bay reservations, digital pass |
+| System Admin | `admin@parkora.in` | `AdminPass123!` | Global metrics, facility builder, shift rosters |
+| Duty Staff (Shift 1) | `staff.arun@parkora.in` | `StaffPass123!` | Kannur Central Bus Terminal, 06:00 – 18:00 IST |
+| Duty Staff (Shift 2) | `staff.sam@parkora.in` | `StaffPass123!` | Kannur Central Bus Terminal, 18:00 – 06:00 IST |
+| Customer | (you can signup) | Hub search, bay reservations, digital pass |
 
 > [!TIP]
 > If you open the staff terminal outside an assigned shift window, click **Auto-Switch to On-Duty Staff** to switch to the operator rostered for the current shift.
@@ -190,37 +162,36 @@ parkora/
 
 ### 1. Clone the repository
 
-```bash
+
 git clone https://github.com/sayanthkv/parkora.git
 cd parkora
-```
 
 ### 2. Set up the backend
 
-```bash
+
 cd server
 npm install
-```
+
 
 Create `server/.env` (see [Environment Variables](#environment-variables)), then seed the database and start the server:
 
-```bash
+
 npm run seed   # seeds facilities, bays, and demo accounts
 npm run dev
-```
+
 
 ### 3. Set up the frontend
 
-```bash
+
 cd ../client
 npm install
-```
+
 
 Create `client/.env`, then start the dev server:
 
-```bash
+
 npm run dev
-```
+
 
 Open **http://localhost:5173** in your browser.
 
@@ -281,16 +252,14 @@ All Staff and Admin endpoints require a valid JWT and the matching role.
 
 ## Author
 
-**Sayanth KV** (Sayanth Sajeevan), MERN Stack Developer
+**Sayanth KV** , MERN Stack Developer
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-sayanth--thedeveloper-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/sayanth-thedeveloper)
-[![GitHub](https://img.shields.io/badge/GitHub-sayanthkv-181717?logo=github&logoColor=white)](https://github.com/sayanthkv)
-[![Email](https://img.shields.io/badge/Email-sayanthsajeev363%40gmail.com-D14836?logo=gmail&logoColor=white)](mailto:sayanthsajeev363@gmail.com)
+[![LinkedIn]](https://www.linkedin.com/in/sayanth-thedeveloper)
+[![GitHub]](https://github.com/sayanthkv)
+[![Email]](mailto:sayanthsajeev363@gmail.com)
 
 ---
 
-<div align="center">
+
 
 If you find Parkora useful, consider giving it a ⭐. Feedback and suggestions are welcome!
-
-</div>
