@@ -23,16 +23,17 @@ const ProtectedRoute = ({ allowedRoles }) => {
 
   // Strict role boundaries
   if (allowedRoles && !allowedRoles.includes(userRole)) {
+    // 1. Staff trying to access Admin or Customer routes
     if (userRole === 'staff') {
-    
       return <Navigate to="/staff" replace />;
     }
 
+    // 2. Customer trying to access Admin or Staff routes
     if (userRole === 'customer') {
-    
       return <Navigate to="/locations" replace />;
     }
 
+    // 3. Admin trying to access Customer or Staff operations
     if (userRole === 'admin') {
       return <Navigate to="/admin" replace />;
     }

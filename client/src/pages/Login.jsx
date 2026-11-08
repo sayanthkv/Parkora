@@ -23,19 +23,19 @@ export default function Login() {
     try {
       const user = await login(email, password);
 
-      // 1. Staff strictly lands on their Staff Home portal
-      if (user?.role === 'staff') {
-        navigate('/staff', { replace: true });
-        return;
-      }
-
-      // 2. Admin strictly lands on Admin Console
+      // 1. Admin strictly lands on Admin Dashboard (Overview with charts)
       if (user?.role === 'admin') {
         navigate('/admin', { replace: true });
         return;
       }
 
-      // 3. Customer handles deep-link or defaults to /locations
+      // 2. Staff strictly lands on Staff Station
+      if (user?.role === 'staff') {
+        navigate('/staff', { replace: true });
+        return;
+      }
+
+      // 3. Customer handles deep link or defaults to locations
       if (redirectParam && !redirectParam.startsWith('/staff') && !redirectParam.startsWith('/admin')) {
         navigate(redirectParam, { replace: true });
       } else {
@@ -59,7 +59,7 @@ export default function Login() {
             Sign In to Parkora
           </h2>
           <p className="text-xs text-slate-500 mt-1.5 font-medium">
-            Manage your reservations and QR parking passes.
+            Access your management dashboard or parking passes.
           </p>
         </div>
 

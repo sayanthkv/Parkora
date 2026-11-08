@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import API from '../api/axios';
 import {
   ShieldCheck, Users, RefreshCw, AlertCircle, CheckCircle2, Search, Building,
   Image as ImageIcon, UserCheck, UserX, X, Edit, Trash2, PieChart as PieIcon, BarChart3,
-  Layers, Plus, Zap, Mail, Phone, User, Calendar, Clock, Banknote, ShieldAlert, Activity
+  Layers, Plus, Zap, Mail, Phone, User, Calendar, Clock, Banknote, ShieldAlert, Activity,
+  SlidersHorizontal, Check, MapPin
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
@@ -11,7 +13,15 @@ import {
 } from 'recharts';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('metrics');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-Synched Tab: maps to the Navbar tabs: 'overview', 'facilities', 'staff', 'audit', 'bookings'
+  const currentTab = searchParams.get('tab') || 'overview';
+  const activeTab = currentTab === 'metrics' ? 'overview' : currentTab;
+
+  const setActiveTab = (tabKey) => {
+    setSearchParams({ tab: tabKey });
+  };
 
   const [metrics, setMetrics] = useState(null);
   const [locations, setLocations] = useState([]);
@@ -27,8 +37,6 @@ export default function AdminDashboard() {
   // Modals & Structure States
   const [editingFacility, setEditingFacility] = useState(null);
   const [structureFacility, setStructureFacility] = useState(null);
-  const [viewingStaff, setViewingStaff] = useState(null);
-  const [editingStaff, setEditingStaff] = useState(null);
 
   const [facilityFloors, setFacilityFloors] = useState([]);
   const [facilityBays, setFacilityBays] = useState([]);
@@ -44,7 +52,6 @@ export default function AdminDashboard() {
     isMaintenance: false,
   });
 
-  const [staffForm, setStaffForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [newLocation, setNewLocation] = useState({
     name: '', slug: '', description: '', amenities: '24/7 Access, CCTV, Covered Parking',
     street: '', area: '', hourlyRate: 30, baseRate: 20, lat: 11.8689, lng: 75.3725, imageUrl: '',
@@ -218,16 +225,6 @@ export default function AdminDashboard() {
       setFacilityBays((prev) => prev.filter((b) => b._id !== bayId));
     } catch (err) {
       setError('Failed to delete bay.');
-    }
-  };
-
-  const handleToggleBayStatus = async (bay, field) => {
-    try {
-      const updatedValue = !bay[field];
-      const res = await API.put(`/admin/bays/${bay._id}`, { [field]: updatedValue });
-      setFacilityBays((prev) => prev.map((b) => (b._id === bay._id ? res.data.data : b)));
-    } catch (err) {
-      setError('Failed to update bay.');
     }
   };
 
@@ -447,125 +444,97 @@ export default function AdminDashboard() {
 
   const currentFloorBays = facilityBays.filter((b) => b.floor === activeFloorId);
 
-  // Helper to get formatted status label in assignment dropdown
   const getStaffOptionLabel = (staff, currentFacilityId) => {
     const staffFacilityId = staff.assignedFacility?._id || staff.assignedFacility;
     const isAssignedHere = staffFacilityId && String(staffFacilityId) === String(currentFacilityId);
 
     if (isAssignedHere) {
-      return `✓ ${staff.name} — (Currently Assigned Here - ${staff.shiftSlot === 'shift_1' ? 'Shift 1' : 'Shift 2'})`;
+      return `✓ ${staff.name} — (Assigned Here - ${staff.shiftSlot === 'shift_1' ? 'Shift 1' : 'Shift 2'})`;
     }
-
     if (staffFacilityId) {
-      const locName = staff.assignedFacility?.name || 'Another Facility';
-      return `⚠️ ${staff.name} — (Already Assigned to: ${locName} [${staff.shiftSlot === 'shift_1' ? 'Shift 1' : 'Shift 2'}])`;
+      const locName = staff.assignedFacility?.name || 'Another Location';
+      return `⚠️ ${staff.name} — (${locName} [${staff.shiftSlot === 'shift_1' ? 'Shift 1' : 'Shift 2'}])`;
     }
-
-    return `○ ${staff.name} — (Available / Unassigned)`;
+    return `○ ${staff.name} — (Available)`;
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8 font-body">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pt-28 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8 font-body">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm">
+      {/* Top Console Header Banner */}
+      <div className="bg-white p-7 sm:p-9 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-5">
         <div>
-          <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
-            <ShieldCheck className="w-3.5 h-3.5" /> Admin Console
+          <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-2.5">
+            <ShieldCheck className="w-3.5 h-3.5" /> Operations Administration Console
           </div>
-          <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">Kannur Smart Parking Core</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">Dual-shift staff synchronization, floor bay layouts, facility controls, and live audit tracking.</p>
+          <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">
+            Kannur Smart Parking Core
+          </h1>
+          <p className="text-xs text-slate-500 mt-1 font-medium">
+            Dual-shift staff synchronization, floor bay layouts, facility controls, and live audit tracking.
+          </p>
         </div>
 
         <button
           onClick={fetchAdminData}
-          className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-900 px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+          className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-900 px-5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 self-start sm:self-auto"
         >
           <RefreshCw className={`w-3.5 h-3.5 text-[#0B3D2E] ${loading ? 'animate-spin' : ''}`} />
           Refresh Console
         </button>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 gap-6 text-xs sm:text-sm font-bold uppercase tracking-wider overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('metrics')}
-          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'metrics' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
-        >
-          System Overview
-        </button>
-        <button
-          onClick={() => setActiveTab('locations')}
-          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'locations' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
-        >
-          Facilities & Shifts
-        </button>
-        <button
-          onClick={() => setActiveTab('staff')}
-          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'staff' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
-        >
-          Staff Directory
-        </button>
-        <button
-          onClick={() => setActiveTab('shifts_audit')}
-          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'shifts_audit' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
-        >
-          <Activity className="w-3.5 h-3.5" /> Shift Handover & Audit
-        </button>
-        <button
-          onClick={() => setActiveTab('bookings')}
-          className={`pb-3 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'bookings' ? 'border-b-2 border-[#0B3D2E] text-[#0B3D2E]' : 'text-slate-500 hover:text-slate-900'}`}
-        >
-          Master Bookings
-        </button>
-      </div>
-
+      {/* Alert Notices */}
       {message && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-semibold flex items-center gap-2">
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-semibold flex items-center gap-2.5 shadow-sm">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           {message}
         </div>
       )}
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 font-semibold flex items-center gap-2">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 font-semibold flex items-center gap-2.5 shadow-sm">
           <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
           {error}
         </div>
       )}
 
-      {/* TAB 1: System Overview */}
-      {activeTab === 'metrics' && (
+      {/* =========================================================================
+          TAB 1: SYSTEM OVERVIEW (Overview with Metrics & Charts)
+         ========================================================================= */}
+      {(activeTab === 'overview' || activeTab === 'metrics') && (
         <div className="space-y-8">
+          {/* Key Metric Tiles */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest block">Configured Facilities</span>
-              <span className="text-3xl font-heading font-extrabold text-slate-900">{metrics?.totalLocations ?? 0}</span>
+            <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
+              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-widest block">Configured Facilities</span>
+              <span className="text-3xl sm:text-4xl font-heading font-black text-slate-900">{metrics?.totalLocations ?? 0}</span>
             </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest block">Total Parking Bays</span>
-              <span className="text-3xl font-heading font-extrabold text-slate-900">{metrics?.totalBays ?? 0}</span>
+            <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
+              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-widest block">Total Parking Bays</span>
+              <span className="text-3xl sm:text-4xl font-heading font-black text-slate-900">{metrics?.totalBays ?? 0}</span>
             </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest block">Active Parked Vehicles</span>
-              <span className="text-3xl font-heading font-extrabold text-[#0B3D2E]">{metrics?.activeBookings ?? 0}</span>
+            <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
+              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-widest block">Active Parked Vehicles</span>
+              <span className="text-3xl sm:text-4xl font-heading font-black text-[#0B3D2E]">{metrics?.activeBookings ?? 0}</span>
             </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest block">Total Facility Revenue</span>
-              <span className="text-3xl font-heading font-extrabold text-[#0B3D2E]">₹{metrics?.totalRevenue ?? 0}</span>
+            <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
+              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-widest block">Total Facility Revenue</span>
+              <span className="text-3xl sm:text-4xl font-heading font-black text-[#0B3D2E]">₹{metrics?.totalRevenue ?? 0}</span>
             </div>
           </div>
 
+          {/* Visual Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center gap-2">
+            <div className="lg:col-span-5 bg-white p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <PieIcon className="w-4 h-4 text-[#0B3D2E]" />
                 <h3 className="font-heading font-bold text-sm text-slate-900">Live Bay Occupancy Ratio</h3>
               </div>
-              <div className="h-64 w-full">
+              <div className="h-72 w-full pt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={bayOccupancyData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value">
+                    <Pie data={bayOccupancyData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value">
                       {bayOccupancyData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
@@ -577,19 +546,19 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center gap-2">
+            <div className="lg:col-span-7 bg-white p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <BarChart3 className="w-4 h-4 text-[#0B3D2E]" />
                 <h3 className="font-heading font-bold text-sm text-slate-900">Facility Revenue (₹)</h3>
               </div>
-              <div className="h-64 w-full">
+              <div className="h-72 w-full pt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={facilityRevenueData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="revenue" fill="#0B3D2E" radius={[6, 6, 0, 0]} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B' }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
+                    <Tooltip cursor={{ fill: '#F8FAFC' }} />
+                    <Bar dataKey="revenue" fill="#0B3D2E" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -598,20 +567,25 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 2: Facilities with Edit & Delete & Manage Shifts */}
-      {activeTab === 'locations' && (
+      {/* =========================================================================
+          TAB 2: FACILITIES & SHIFTS
+         ========================================================================= */}
+      {activeTab === 'facilities' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-5 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-base font-heading font-bold text-slate-900">Add New Facility</h2>
-            <form onSubmit={handleCreateLocation} className="space-y-3 text-xs">
+          {/* Add Facility Form */}
+          <div className="lg:col-span-5 bg-white p-7 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <h2 className="text-base font-heading font-bold text-slate-900 border-b border-slate-100 pb-3">
+              Add New Facility Node
+            </h2>
+            <form onSubmit={handleCreateLocation} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Name</label>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Facility Name *</label>
                 <input
                   type="text"
                   placeholder="e.g. Kannur Fort Parking Lot"
                   value={newLocation.name}
                   onChange={(e) => setNewLocation({ ...newLocation, name: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                   required
                 />
               </div>
@@ -623,7 +597,7 @@ export default function AdminDashboard() {
                   placeholder="Overview description for public listing..."
                   value={newLocation.description}
                   onChange={(e) => setNewLocation({ ...newLocation, description: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full h-56 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:border-[#0B3D2E]"
                 />
               </div>
 
@@ -634,7 +608,7 @@ export default function AdminDashboard() {
                   placeholder="24/7 Access, CCTV, Covered Parking"
                   value={newLocation.amenities}
                   onChange={(e) => setNewLocation({ ...newLocation, amenities: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                 />
               </div>
 
@@ -646,7 +620,7 @@ export default function AdminDashboard() {
                     placeholder="Fort Road"
                     value={newLocation.street}
                     onChange={(e) => setNewLocation({ ...newLocation, street: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
@@ -657,7 +631,7 @@ export default function AdminDashboard() {
                     placeholder="Ayikkara"
                     value={newLocation.area}
                     onChange={(e) => setNewLocation({ ...newLocation, area: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
@@ -670,7 +644,7 @@ export default function AdminDashboard() {
                     type="number"
                     value={newLocation.baseRate}
                     onChange={(e) => setNewLocation({ ...newLocation, baseRate: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
@@ -680,7 +654,7 @@ export default function AdminDashboard() {
                     type="number"
                     value={newLocation.hourlyRate}
                     onChange={(e) => setNewLocation({ ...newLocation, hourlyRate: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                     required
                   />
                 </div>
@@ -689,65 +663,63 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 cursor-pointer transition-all shadow-sm text-sm active:scale-95"
+                className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-3 cursor-pointer transition-all shadow-sm text-xs uppercase tracking-wider active:scale-95"
               >
-                {submitting ? 'Saving Facility...' : 'Add Location'}
+                {submitting ? 'Saving Facility...' : 'Add Location Node'}
               </button>
             </form>
           </div>
 
-          <div className="lg:col-span-7 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-base font-heading font-bold text-slate-900">Active Facilities ({locations.length})</h2>
-            <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
+          {/* Active Facility List */}
+          <div className="lg:col-span-7 bg-white p-7 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <h2 className="text-base font-heading font-bold text-slate-900 border-b border-slate-100 pb-3">
+              Active Facilities ({locations.length})
+            </h2>
+            <div className="space-y-4 max-h-[640px] overflow-y-auto pr-1">
               {locations.map((loc) => {
                 const isPayyambalam = loc.name.toLowerCase().includes('payyambalam');
                 const shiftInfo = loc.shiftInfo || { activeSlot: 'shift_1', label: 'Shift 1 Active' };
 
                 return (
-                  <div key={loc._id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-3">
+                  <div key={loc._id} className="p-5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-heading font-bold text-sm text-slate-900">{loc.name}</span>
-                          {isPayyambalam ? (
-                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[9px] uppercase tracking-wider">
-                              05:00 - 22:00
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[9px] uppercase tracking-wider">
-                              24/7 Multi-Shift
-                            </span>
-                          )}
+                          <span className="font-heading font-extrabold text-sm text-slate-900">{loc.name}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                            isPayyambalam ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
+                          }`}>
+                            {isPayyambalam ? '05:00 - 22:00' : '24/7 Dual Shift'}
+                          </span>
                         </div>
-                        <span className="text-slate-500 font-medium block mt-0.5">{loc.address?.street}, {loc.address?.area}</span>
+                        <span className="text-slate-500 font-medium block mt-1">
+                          {loc.address?.street}, {loc.address?.area}
+                        </span>
                       </div>
 
-                      <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                        <span className="font-bold text-[#0B3D2E] bg-white border border-slate-200 px-2 py-1 rounded-lg text-xs mr-1 shadow-sm">
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <span className="font-bold text-[#0B3D2E] bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl text-xs shadow-sm">
                           ₹{loc.pricing?.hourlyRate}/hr
                         </span>
 
-                        {/* Layout Builder */}
                         <button
                           type="button"
                           onClick={() => openStructureManager(loc)}
-                          className="px-2.5 py-1.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white rounded-lg font-bold text-[11px] flex items-center gap-1 shadow-sm cursor-pointer"
+                          className="px-3 py-1.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
                           title="Configure Floors & Bays"
                         >
                           <Layers className="w-3.5 h-3.5 text-[#F2B705]" /> Layout
                         </button>
 
-                        {/* Assign / Manage Shifts */}
                         <button
                           type="button"
                           onClick={() => openShiftAssignModal(loc)}
-                          className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-[#0B3D2E] border border-slate-200 rounded-lg font-bold text-[11px] flex items-center gap-1 shadow-sm cursor-pointer"
+                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#0B3D2E] border border-slate-200 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
                           title="Assign Staff Shifts"
                         >
                           <Users className="w-3.5 h-3.5 text-[#0B3D2E]" /> Shifts
                         </button>
 
-                        {/* Edit Facility Button */}
                         <button
                           type="button"
                           onClick={() => {
@@ -757,17 +729,16 @@ export default function AdminDashboard() {
                               amenities: Array.isArray(loc.amenities) ? loc.amenities.join(', ') : loc.amenities || '',
                             });
                           }}
-                          className="p-1.5 bg-white hover:bg-slate-100 text-blue-600 rounded-lg border border-slate-200 cursor-pointer"
-                          title="Edit All Facility Details"
+                          className="p-2 bg-white hover:bg-slate-100 text-blue-600 rounded-xl border border-slate-200 cursor-pointer shadow-sm"
+                          title="Edit Facility Particulars"
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Delete Facility Button */}
                         <button
                           type="button"
                           onClick={() => handleDeleteLocation(loc._id, loc.name)}
-                          className="p-1.5 bg-white hover:bg-red-50 text-red-600 rounded-lg border border-slate-200 cursor-pointer"
+                          className="p-2 bg-white hover:bg-red-50 text-red-600 rounded-xl border border-slate-200 cursor-pointer shadow-sm"
                           title="Delete Facility"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -775,16 +746,16 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    {/* Dual Shift Display */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200 text-[11px]">
-                      <div className={`p-2.5 rounded-lg border ${shiftInfo.activeSlot === 'shift_1' ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-400' : 'bg-white border-slate-200'}`}>
+                    {/* Dual Shift Assignment Pills */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-200/80 text-[11px]">
+                      <div className={`p-3 rounded-xl border ${shiftInfo.activeSlot === 'shift_1' ? 'bg-emerald-50/80 border-emerald-300 ring-1 ring-emerald-400' : 'bg-white border-slate-200'}`}>
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-bold text-slate-700">
                             {isPayyambalam ? 'Shift 1: 05:00-13:30' : 'Shift 1: 06:00-18:00'}
                           </span>
                           {shiftInfo.activeSlot === 'shift_1' && (
-                            <span className="px-1.5 py-0.2 bg-emerald-600 text-white font-extrabold rounded text-[9px] uppercase animate-pulse">
-                              ON DUTY
+                            <span className="px-1.5 py-0.2 bg-emerald-600 text-white font-extrabold rounded text-[9px] uppercase">
+                              ACTIVE
                             </span>
                           )}
                         </div>
@@ -795,14 +766,14 @@ export default function AdminDashboard() {
                         )}
                       </div>
 
-                      <div className={`p-2.5 rounded-lg border ${shiftInfo.activeSlot === 'shift_2' ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-400' : 'bg-white border-slate-200'}`}>
+                      <div className={`p-3 rounded-xl border ${shiftInfo.activeSlot === 'shift_2' ? 'bg-emerald-50/80 border-emerald-300 ring-1 ring-emerald-400' : 'bg-white border-slate-200'}`}>
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-bold text-slate-700">
                             {isPayyambalam ? 'Shift 2: 13:30-22:00' : 'Shift 2: 18:00-06:00'}
                           </span>
                           {shiftInfo.activeSlot === 'shift_2' && (
-                            <span className="px-1.5 py-0.2 bg-emerald-600 text-white font-extrabold rounded text-[9px] uppercase animate-pulse">
-                              ON DUTY
+                            <span className="px-1.5 py-0.2 bg-emerald-600 text-white font-extrabold rounded text-[9px] uppercase">
+                              ACTIVE
                             </span>
                           )}
                         </div>
@@ -821,11 +792,16 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 3: Staff Directory with Delete Staff Account */}
+      {/* =========================================================================
+          TAB 3: STAFF DIRECTORY
+         ========================================================================= */}
       {activeTab === 'staff' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-4 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-base font-heading font-bold text-slate-900">Register Staff Operator</h2>
+          {/* Register Form */}
+          <div className="lg:col-span-4 bg-white p-7 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <h2 className="text-base font-heading font-bold text-slate-900 border-b border-slate-100 pb-3">
+              Register Staff Personnel
+            </h2>
             <form onSubmit={handleCreateStaff} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold uppercase text-slate-500 mb-1">Full Name</label>
@@ -834,7 +810,7 @@ export default function AdminDashboard() {
                   placeholder="Full Name"
                   value={newStaff.name}
                   onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-[#0B3D2E]"
                   required
                 />
               </div>
@@ -845,7 +821,7 @@ export default function AdminDashboard() {
                   placeholder="staff@parkora.in"
                   value={newStaff.email}
                   onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-[#0B3D2E]"
                   required
                 />
               </div>
@@ -855,7 +831,7 @@ export default function AdminDashboard() {
                   type="password"
                   value={newStaff.password}
                   onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-[#0B3D2E]"
                   required
                 />
               </div>
@@ -866,16 +842,16 @@ export default function AdminDashboard() {
                   placeholder="+91 9876543210"
                   value={newStaff.phone}
                   onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-[#0B3D2E]"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold uppercase text-slate-500 mb-1">Facility</label>
                   <select
                     value={newStaff.assignedFacility}
                     onChange={(e) => setNewStaff({ ...newStaff, assignedFacility: e.target.value })}
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
                   >
                     <option value="">Unassigned</option>
                     {locations.map((loc) => (
@@ -888,7 +864,7 @@ export default function AdminDashboard() {
                   <select
                     value={newStaff.shiftSlot}
                     onChange={(e) => setNewStaff({ ...newStaff, shiftSlot: e.target.value })}
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
                   >
                     <option value="shift_1">Shift 1</option>
                     <option value="shift_2">Shift 2</option>
@@ -898,46 +874,49 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 cursor-pointer shadow-sm text-sm"
+                className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-3 cursor-pointer shadow-sm text-xs uppercase tracking-wider active:scale-95"
               >
                 {submitting ? 'Registering...' : 'Create Staff Account'}
               </button>
             </form>
           </div>
 
-          <div className="lg:col-span-8 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-base font-heading font-bold text-slate-900">Registered Personnel ({staffList.length})</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[580px] overflow-y-auto pr-1">
+          {/* Directory Cards */}
+          <div className="lg:col-span-8 bg-white p-7 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <h2 className="text-base font-heading font-bold text-slate-900 border-b border-slate-100 pb-3">
+              Registered Personnel ({staffList.length})
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-1">
               {staffList.map((staff) => {
                 const assignedLoc = staff.assignedFacility?.name || 'Unassigned';
                 const isActive = staff.isActive !== false;
 
                 return (
-                  <div key={staff._id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-3 flex flex-col justify-between">
+                  <div key={staff._id} className="p-5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-3.5 flex flex-col justify-between">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full text-white font-bold flex items-center justify-center text-sm shrink-0 ${isActive ? 'bg-[#0B3D2E]' : 'bg-slate-400'}`}>
+                        <div className={`w-11 h-11 rounded-full text-white font-black flex items-center justify-center text-sm shrink-0 shadow-sm ${isActive ? 'bg-[#0B3D2E]' : 'bg-slate-400'}`}>
                           {staff.name?.[0] || 'S'}
                         </div>
                         <div>
-                          <span className="font-heading font-bold text-sm text-slate-900 block">{staff.name}</span>
-                          <span className="text-slate-500 font-medium flex items-center gap-1">
+                          <span className="font-heading font-extrabold text-sm text-slate-900 block">{staff.name}</span>
+                          <span className="text-slate-500 font-medium flex items-center gap-1 mt-0.5">
                             <Mail className="w-3 h-3 text-[#0B3D2E]" /> {staff.email}
                           </span>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
                         {isActive ? 'ACTIVE' : 'DEACTIVATED'}
                       </span>
                     </div>
 
-                    <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 text-[11px] space-y-1.5 shadow-xs">
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Facility:</span>
+                        <span className="text-slate-500">Facility Station:</span>
                         <span className="font-bold text-[#0B3D2E]">{isActive ? assignedLoc : 'Unassigned'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Shift Slot:</span>
+                        <span className="text-slate-500">Scheduled Slot:</span>
                         <span className="font-extrabold uppercase text-slate-800">{staff.shiftSlot ? staff.shiftSlot.replace('_', ' ') : 'None'}</span>
                       </div>
                     </div>
@@ -946,19 +925,18 @@ export default function AdminDashboard() {
                       <button
                         type="button"
                         onClick={() => handleToggleStaffStatus(staff)}
-                        className={`flex-1 py-1.5 font-bold border rounded-lg transition-colors cursor-pointer text-xs ${
+                        className={`flex-1 py-2 font-bold border rounded-xl transition-all cursor-pointer text-xs ${
                           isActive ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200' : 'bg-emerald-600 text-white'
                         }`}
                       >
                         {isActive ? 'Deactivate' : 'Activate'}
                       </button>
 
-                      {/* Delete Staff Account Button */}
                       <button
                         type="button"
                         onClick={() => handleDeleteStaff(staff._id, staff.name)}
-                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-200 rounded-lg cursor-pointer"
-                        title="Delete Staff Account Permanently"
+                        className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-200 rounded-xl cursor-pointer"
+                        title="Delete Staff Account"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -971,19 +949,21 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 4: Shift Handover & Attendance Audit Log */}
-      {activeTab === 'shifts_audit' && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      {/* =========================================================================
+          TAB 4: SHIFT HANDOVER & AUDIT LOGS
+         ========================================================================= */}
+      {activeTab === 'audit' && (
+        <div className="bg-white p-7 sm:p-9 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
               <h2 className="text-base font-heading font-bold text-slate-900">Live Shift Status & Audit Verification Stream</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Tracks automatic on-duty logins, handovers between equal shift blocks, and real-time verification at gates.
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                Tracks automatic on-duty logins, handovers between shift blocks, and real-time gate pass approvals.
               </p>
             </div>
             <button
               onClick={fetchAdminData}
-              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition-all cursor-pointer self-start sm:self-auto"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer self-start sm:self-auto"
             >
               Refresh Audit Feed
             </button>
@@ -993,18 +973,18 @@ export default function AdminDashboard() {
             <table className="w-full text-left text-xs text-slate-900">
               <thead className="bg-slate-50 border-b border-slate-200 uppercase text-[10px] font-bold text-slate-500">
                 <tr>
-                  <th className="p-3.5">Timestamp (IST)</th>
-                  <th className="p-3.5">Staff Operator</th>
-                  <th className="p-3.5">Facility Location</th>
-                  <th className="p-3.5">Duty Shift</th>
-                  <th className="p-3.5">Event Action</th>
-                  <th className="p-3.5">Details</th>
+                  <th className="p-4">Timestamp (IST)</th>
+                  <th className="p-4">Staff Operator</th>
+                  <th className="p-4">Facility Location</th>
+                  <th className="p-4">Duty Shift</th>
+                  <th className="p-4">Event Action</th>
+                  <th className="p-4">Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {activityLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={6} className="py-16 text-center text-slate-400 font-medium">
                       No shift handover or gate activity recorded yet today.
                     </td>
                   </tr>
@@ -1019,25 +999,25 @@ export default function AdminDashboard() {
 
                     return (
                       <tr key={log._id} className="hover:bg-slate-50/70">
-                        <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                        <td className="p-4 font-mono text-slate-600 whitespace-nowrap">
                           {new Date(log.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                         </td>
-                        <td className="p-3.5 font-bold text-slate-900 whitespace-nowrap">
+                        <td className="p-4 font-bold text-slate-900 whitespace-nowrap">
                           {log.staff?.name || 'Operator'}
                           <span className="block text-[10px] font-normal text-slate-400">{log.staff?.email}</span>
                         </td>
-                        <td className="p-3.5 font-medium text-slate-700 whitespace-nowrap">
+                        <td className="p-4 font-medium text-slate-700 whitespace-nowrap">
                           {log.facility?.name}
                         </td>
-                        <td className="p-3.5 font-extrabold uppercase text-[#0B3D2E] whitespace-nowrap">
+                        <td className="p-4 font-extrabold uppercase text-[#0B3D2E] whitespace-nowrap">
                           {log.shiftSlot?.replace('_', ' ')}
                         </td>
-                        <td className="p-3.5 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${actionBadge}`}>
+                        <td className="p-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase ${actionBadge}`}>
                             {log.actionType?.replace(/_/g, ' ')}
                           </span>
                         </td>
-                        <td className="p-3.5 text-slate-600 font-medium max-w-xs truncate">
+                        <td className="p-4 text-slate-600 font-medium max-w-xs truncate">
                           {log.details || 'Routine gate operation'}
                         </td>
                       </tr>
@@ -1050,19 +1030,21 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 5: Master Bookings List */}
+      {/* =========================================================================
+          TAB 5: MASTER BOOKINGS LEDGER
+         ========================================================================= */}
       {activeTab === 'bookings' && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div className="bg-white p-7 sm:p-9 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
               <h2 className="text-base font-heading font-bold text-slate-900">Master Reservations Ledger</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
+              <p className="text-xs text-slate-500 font-medium mt-1">
                 Showing {filteredBookings.length} total reservations across {groupedBookings.length} scheduled dates.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl">
                 <Calendar className="w-3.5 h-3.5 text-[#0B3D2E]" />
                 <input
                   type="date"
@@ -1078,13 +1060,13 @@ export default function AdminDashboard() {
               </div>
 
               <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                <Search className="absolute left-3.5 top-3 w-3.5 h-3.5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Filter by ref, vehicle, user..."
+                  placeholder="Filter ref, vehicle, user..."
                   value={bookingFilter}
                   onChange={(e) => setBookingFilter(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                 />
               </div>
             </div>
@@ -1092,17 +1074,17 @@ export default function AdminDashboard() {
 
           <div className="space-y-6">
             {groupedBookings.map((group) => (
-              <div key={group.dateKey} className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1.5 bg-[#0B3D2E] text-white rounded-lg"><Calendar className="w-3.5 h-3.5" /></span>
+              <div key={group.dateKey} className="border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
+                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 bg-[#0B3D2E] text-white rounded-xl shadow-xs"><Calendar className="w-4 h-4" /></span>
                     <span className="font-heading font-extrabold text-sm text-slate-900">{group.formattedDate}</span>
-                    <span className="bg-white border border-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                    <span className="bg-white border border-slate-200 text-slate-600 px-3 py-0.5 rounded-full text-[10px] font-bold">
                       {group.items.length} {group.items.length === 1 ? 'Booking' : 'Bookings'}
                     </span>
                   </div>
                   <div className="text-xs font-semibold text-slate-600">
-                    Day Total: <strong className="text-[#0B3D2E] font-heading font-extrabold text-sm">₹{group.totalDayRevenue}</strong>
+                    Day Total: <strong className="text-[#0B3D2E] font-heading font-extrabold text-sm ml-1">₹{group.totalDayRevenue}</strong>
                   </div>
                 </div>
 
@@ -1110,33 +1092,33 @@ export default function AdminDashboard() {
                   <table className="w-full text-left text-xs text-slate-900">
                     <thead className="bg-white border-b border-slate-200 uppercase text-[10px] font-bold text-slate-400">
                       <tr>
-                        <th className="p-3.5">Booking Ref</th>
-                        <th className="p-3.5">Customer</th>
-                        <th className="p-3.5">Facility & Slot</th>
-                        <th className="p-3.5">Vehicle Reg</th>
-                        <th className="p-3.5">Scheduled Interval</th>
-                        <th className="p-3.5">Status</th>
-                        <th className="p-3.5 text-right">Amount</th>
+                        <th className="p-4">Booking Ref</th>
+                        <th className="p-4">Customer</th>
+                        <th className="p-4">Facility & Slot</th>
+                        <th className="p-4">Vehicle Reg</th>
+                        <th className="p-4">Interval</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right">Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
                       {group.items.map((b) => (
                         <tr key={b._id} className="hover:bg-slate-50/70">
-                          <td className="p-3.5 font-mono font-bold text-[#0B3D2E] whitespace-nowrap">{b.bookingRef}</td>
-                          <td className="p-3.5 font-medium whitespace-nowrap">
+                          <td className="p-4 font-mono font-bold text-[#0B3D2E] whitespace-nowrap">{b.bookingRef}</td>
+                          <td className="p-4 font-medium whitespace-nowrap">
                             <span className="font-bold text-slate-900 block">{b.user?.name || 'Customer'}</span>
                             <span className="text-[11px] text-slate-400 font-normal">{b.user?.email}</span>
                           </td>
-                          <td className="p-3.5 whitespace-nowrap">
+                          <td className="p-4 whitespace-nowrap">
                             <span className="font-semibold text-slate-900 block">{b.location?.name}</span>
                             <span className="text-[11px] text-[#0B3D2E] font-bold">Bay {b.bay?.bayNumber || 'N/A'}</span>
                           </td>
-                          <td className="p-3.5 font-mono uppercase font-bold text-slate-900 whitespace-nowrap">{b.vehicle?.regNumber}</td>
-                          <td className="p-3.5 whitespace-nowrap font-medium text-slate-700">
+                          <td className="p-4 font-mono uppercase font-bold text-slate-900 whitespace-nowrap">{b.vehicle?.regNumber}</td>
+                          <td className="p-4 whitespace-nowrap font-medium text-slate-700">
                             {new Date(b.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} – {new Date(b.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} IST
                           </td>
-                          <td className="p-3.5 whitespace-nowrap font-extrabold uppercase text-[#145C43]">{b.status}</td>
-                          <td className="p-3.5 text-right font-heading font-extrabold text-sm text-[#0B3D2E] whitespace-nowrap">₹{getDisplayAmount(b)}</td>
+                          <td className="p-4 whitespace-nowrap font-extrabold uppercase text-[#145C43]">{b.status}</td>
+                          <td className="p-4 text-right font-heading font-extrabold text-sm text-[#0B3D2E] whitespace-nowrap">₹{getDisplayAmount(b)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1148,28 +1130,32 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* DUAL SHIFT REASSIGNMENT MODAL (WITH EXPLICIT ASSIGNMENT LABELS) */}
+      {/* =========================================================================
+          MODALS & OVERLAYS
+         ========================================================================= */}
+
+      {/* DUAL SHIFT REASSIGNMENT MODAL */}
       {assigningShiftFacility && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl relative">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-7 sm:p-9 space-y-6 shadow-2xl relative">
             <button
               onClick={() => setAssigningShiftFacility(null)}
-              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0B3D2E] block">Shift Roster Management</span>
-              <h3 className="text-lg font-heading font-extrabold text-slate-900">{assigningShiftFacility.name}</h3>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0B3D2E] block">Shift Roster Assignment</span>
+              <h3 className="text-xl font-heading font-extrabold text-slate-900 mt-0.5">{assigningShiftFacility.name}</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Assign two operators to divide the operating window into equal duty shifts. Staff assigned to other locations are clearly flagged.
+                Assign rostered operators to each shift block. Cross-assigned personnel are clearly flagged.
               </p>
             </div>
 
             <form onSubmit={handleSaveShiftAssignment} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold uppercase text-slate-700 mb-1">
+                <label className="block font-bold uppercase text-slate-700 mb-1.5">
                   {assigningShiftFacility.name.toLowerCase().includes('payyambalam')
                     ? 'Shift 1: 05:00 – 13:30 IST'
                     : 'Shift 1: 06:00 – 18:00 IST'}
@@ -1177,7 +1163,7 @@ export default function AdminDashboard() {
                 <select
                   value={shift1StaffId}
                   onChange={(e) => setShift1StaffId(e.target.value)}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                 >
                   <option value="">Unassigned Operator</option>
                   {activeStaffList.map((s) => (
@@ -1189,7 +1175,7 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block font-bold uppercase text-slate-700 mb-1">
+                <label className="block font-bold uppercase text-slate-700 mb-1.5">
                   {assigningShiftFacility.name.toLowerCase().includes('payyambalam')
                     ? 'Shift 2: 13:30 – 22:00 IST'
                     : 'Shift 2: 18:00 – 06:00 IST'}
@@ -1197,7 +1183,7 @@ export default function AdminDashboard() {
                 <select
                   value={shift2StaffId}
                   onChange={(e) => setShift2StaffId(e.target.value)}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3D2E]"
                 >
                   <option value="">Unassigned Operator</option>
                   {activeStaffList.map((s) => (
@@ -1211,7 +1197,7 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm active:scale-95 transition-all"
+                className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-sm active:scale-95 transition-all mt-2"
               >
                 {submitting ? 'Updating Shifts...' : 'Save Shift Configuration'}
               </button>
@@ -1220,29 +1206,29 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* EDIT FACILITY MODAL (ADMIN CAN EDIT ALL DETAILS) */}
+      {/* EDIT FACILITY MODAL */}
       {editingFacility && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 sm:p-8 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-xl w-full p-7 sm:p-9 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => {
                 setEditSelectedFile(null);
                 setEditingFacility(null);
               }}
-              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="text-lg font-heading font-extrabold text-slate-900">Edit Facility Details</h3>
+            <h3 className="text-xl font-heading font-extrabold text-slate-900">Edit Facility Details</h3>
             
-            <form onSubmit={handleUpdateLocation} className="space-y-3 text-xs">
+            <form onSubmit={handleUpdateLocation} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold uppercase text-slate-500 mb-1">Facility Name</label>
                 <input
                   type="text"
                   value={editingFacility.name}
                   onChange={(e) => setEditingFacility({ ...editingFacility, name: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
                   required
                 />
               </div>
@@ -1253,24 +1239,24 @@ export default function AdminDashboard() {
                   rows={3}
                   value={editingFacility.description || ''}
                   onChange={(e) => setEditingFacility({ ...editingFacility, description: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
                   placeholder="Overview description..."
                 />
               </div>
 
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Amenities (Comma-separated)</label>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Amenities</label>
                 <input
                   type="text"
                   value={editingFacility.amenities || ''}
                   onChange={(e) => setEditingFacility({ ...editingFacility, amenities: e.target.value })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
                   placeholder="24/7 Access, CCTV, Covered Parking"
                 />
               </div>
 
               <div>
-                <label className="block font-bold uppercase text-slate-500 mb-1">Update Cover Image</label>
+                <label className="block font-bold uppercase text-slate-500 mb-1">Cover Image</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -1285,10 +1271,10 @@ export default function AdminDashboard() {
                       reader.readAsDataURL(file);
                     }
                   }}
-                  className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                 />
                 {(editingFacility.imageUrl || editingFacility.image) && (
-                  <img src={editingFacility.imageUrl || editingFacility.image} alt="Cover Preview" className="mt-2 h-28 w-full object-cover rounded-xl border" />
+                  <img src={editingFacility.imageUrl || editingFacility.image} alt="Cover Preview" className="mt-2.5 h-32 w-full object-cover rounded-2xl border" />
                 )}
               </div>
 
@@ -1299,7 +1285,7 @@ export default function AdminDashboard() {
                     type="text"
                     value={editingFacility.address?.street || editingFacility.street || ''}
                     onChange={(e) => setEditingFacility({ ...editingFacility, street: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
                     required
                   />
                 </div>
@@ -1309,7 +1295,7 @@ export default function AdminDashboard() {
                     type="text"
                     value={editingFacility.address?.area || editingFacility.area || ''}
                     onChange={(e) => setEditingFacility({ ...editingFacility, area: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
                     required
                   />
                 </div>
@@ -1322,7 +1308,7 @@ export default function AdminDashboard() {
                     type="number"
                     value={editingFacility.pricing?.baseRate ?? editingFacility.baseRate ?? 0}
                     onChange={(e) => setEditingFacility({ ...editingFacility, baseRate: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
                     required
                   />
                 </div>
@@ -1332,7 +1318,7 @@ export default function AdminDashboard() {
                     type="number"
                     value={editingFacility.pricing?.hourlyRate ?? editingFacility.hourlyRate ?? 30}
                     onChange={(e) => setEditingFacility({ ...editingFacility, hourlyRate: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
                     required
                   />
                 </div>
@@ -1341,7 +1327,7 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-2 text-sm shadow-sm active:scale-95 cursor-pointer transition-all"
+                className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold rounded-xl mt-3 text-xs uppercase tracking-wider shadow-sm active:scale-95 cursor-pointer transition-all"
               >
                 {submitting ? 'Updating...' : 'Save All Changes'}
               </button>
@@ -1353,23 +1339,23 @@ export default function AdminDashboard() {
       {/* FLOOR & BAY STRUCTURE BUILDER MODAL */}
       {structureFacility && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-4xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-4xl w-full p-7 sm:p-9 space-y-6 shadow-2xl relative max-h-[92vh] flex flex-col">
             <button
               onClick={() => setStructureFacility(null)}
-              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0B3D2E] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0B3D2E] bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
                 Facility Structure Builder
               </span>
-              <h3 className="text-xl font-heading font-extrabold text-slate-900 mt-1">{structureFacility.name}</h3>
+              <h3 className="text-xl font-heading font-extrabold text-slate-900 mt-2">{structureFacility.name}</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 overflow-hidden">
-              <div className="md:col-span-4 border-r border-slate-200 pr-4 flex flex-col space-y-4">
+              <div className="md:col-span-4 border-r border-slate-200 pr-5 flex flex-col space-y-4">
                 <form onSubmit={handleCreateFloor} className="space-y-2 text-xs">
                   <label className="block font-bold text-slate-700 uppercase text-[10px]">Add Floor Level</label>
                   <div className="flex gap-2">
@@ -1378,10 +1364,10 @@ export default function AdminDashboard() {
                       placeholder="e.g. Ground Floor"
                       value={newFloorName}
                       onChange={(e) => setNewFloorName(e.target.value)}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
                       required
                     />
-                    <button type="submit" disabled={submitting} className="px-3 bg-[#0B3D2E] text-white rounded-xl font-bold text-xs">
+                    <button type="submit" disabled={submitting} className="px-3.5 bg-[#0B3D2E] text-white rounded-xl font-bold text-xs">
                       <Plus className="w-4 h-4" />
                     </button>
                   </div>
@@ -1392,12 +1378,12 @@ export default function AdminDashboard() {
                     <div
                       key={fl._id}
                       onClick={() => setActiveFloorId(fl._id)}
-                      className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer text-xs ${
-                        activeFloorId === fl._id ? 'bg-[#0B3D2E] text-white font-bold' : 'bg-slate-50 text-slate-800'
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer text-xs transition-all ${
+                        activeFloorId === fl._id ? 'bg-[#0B3D2E] text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-800 hover:bg-slate-100'
                       }`}
                     >
                       <span>{fl.name}</span>
-                      <button type="button" onClick={() => handleDeleteFloor(fl._id, fl.name)} className="p-1 hover:text-red-500">
+                      <button type="button" onClick={() => handleDeleteFloor(fl._id, fl.name)} className="p-1 hover:text-red-400">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1405,29 +1391,29 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="md:col-span-8 flex flex-col space-y-4 overflow-hidden">
+              <div className="md:col-span-8 flex flex-col space-y-4 overflow-hidden pl-1">
                 {activeFloorId && (
                   <form onSubmit={handleCreateBay} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 text-xs">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2.5">
                       <input
                         type="text"
                         placeholder="Bay Code (e.g. G-01)"
                         value={newBay.bayNumber}
                         onChange={(e) => setNewBay({ ...newBay, bayNumber: e.target.value.toUpperCase() })}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold"
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold"
                         required
                       />
                       <select
                         value={newBay.supportedVehicleType}
                         onChange={(e) => setNewBay({ ...newBay, supportedVehicleType: e.target.value })}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
                       >
                         <option value="car">Car / SUV</option>
                         <option value="bike">Two-Wheeler</option>
                         <option value="ev">EV Vehicle</option>
                         <option value="heavy">Heavy Vehicle</option>
                       </select>
-                      <button type="submit" disabled={submitting} className="px-4 py-1.5 bg-[#0B3D2E] text-white font-bold rounded-lg text-xs">
+                      <button type="submit" disabled={submitting} className="px-4 py-2 bg-[#0B3D2E] text-white font-bold rounded-xl text-xs uppercase tracking-wider">
                         Add Bay
                       </button>
                     </div>
@@ -1435,14 +1421,14 @@ export default function AdminDashboard() {
                 )}
 
                 <div className="flex-1 overflow-y-auto space-y-2">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {currentFloorBays.map((bay) => (
-                      <div key={bay._id} className="p-3 rounded-xl border text-xs bg-white flex justify-between items-center">
+                      <div key={bay._id} className="p-3.5 rounded-2xl border text-xs bg-white flex justify-between items-center shadow-xs">
                         <div>
-                          <span className="font-heading font-extrabold">{bay.bayNumber}</span>
-                          <span className="text-[10px] text-slate-400 block uppercase">{bay.supportedVehicleType}</span>
+                          <span className="font-heading font-extrabold text-sm">{bay.bayNumber}</span>
+                          <span className="text-[10px] text-slate-400 block uppercase font-medium">{bay.supportedVehicleType}</span>
                         </div>
-                        <button type="button" onClick={() => handleDeleteBay(bay._id)} className="text-slate-400 hover:text-red-600">
+                        <button type="button" onClick={() => handleDeleteBay(bay._id)} className="text-slate-400 hover:text-red-600 p-1">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
