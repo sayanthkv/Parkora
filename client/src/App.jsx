@@ -21,9 +21,13 @@ import StaffBookCustomer from './pages/StaffBookCustomer';
 import StaffPortal from './pages/StaffPortal';
 import StaffTodayBookings from './pages/StaffTodayBookings';
 
+import ScrollToTop from './components/ScrollToTop';
+
 function App() {
   return (
     <Router>
+
+      <ScrollToTop />
       <div className="flex flex-col min-h-screen bg-white text-[#14201B] w-full font-body">
         <Navbar />
         
