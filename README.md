@@ -1,151 +1,296 @@
-#  Parkora — Smart Parking Reservation & Gate Operations Engine
+<div align="center">
 
-> A high-concurrency, ACID-compliant mobility platform designed to optimize urban parking nodes across Kannur, Kerala. Built on a decoupled MERN architecture with atomic document write-locks, cryptographic pass verification, and dual online/gate reconciliation.
+# 🅿️ Parkora
 
----
+### Smart Urban Parking & Transit Hub Gate Operations System
 
-## 📌 Executive Summary
+A full-stack parking management platform that connects **drivers**, **gate staff**, and **city administrators** through isolated, role-scoped portals, built for high-traffic transit hubs in Kannur, Kerala.
 
-Urban parking hubs—especially multimodal transit centers like railway stations and central bus terminals—suffer from severe circular congestion caused by drivers hunting for unreserved slots. Most booking systems rely on basic CRUD operations, which fail under simultaneous requests (TOCTOU race conditions), allowing double bookings.
+[![Live Demo](https://img.shields.io/badge/Live_Demo-parkora--kannur.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://parkora-kannur.vercel.app)
 
-**Parkora** solves this by treating physical parking spots as critical shared resources:
-- **Pessimistic Concurrency Barrier:** Guarantees non-overlapping time-interval reservations using MongoDB ACID transactions and document version write-locks (`$inc: { __v: 1 }`).
-- **Cryptographic Gate Authentication:** Issues non-guessable, high-entropy 32-byte QR tokens verified against salted SHA-256 digests via timing-safe byte equality.
-- **Automated Lifecycle Worker:** Reclaims abandoned reservations after a 30-minute grace window and flags overstays.
-- **Paise-Strict Accounting:** Formulates all rates, base tariffs, and gateway payments in integer Indian Paise ($1\text{ INR} = 100\text{ Paise}$) to prevent floating-point rounding errors.
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-000000?logo=express&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
+![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)
 
----
-
-## 🛠️ Tech Stack & System Architecture
-
-| Layer | Technologies / Packages | Responsibility |
-| :--- | :--- | :--- |
-| **Client** | React 18, Vite, Tailwind CSS, Lucide Icons, Recharts, Axios | Responsive Single Page App (SPA), dynamic floor bay matrix, QR rendering, client-side interval calculations. |
-| **Server** | Node.js, Express.js (Express 5 safe), `node-cron`, Razorpay SDK | REST API, ACID session orchestration, pessimistic lock execution, signature verification, background worker. |
-| **Database** | MongoDB Atlas, Mongoose ODM | Relational hierarchy, compound indexing, multi-document transactions, write-conflict serialization. |
-| **Security** | Helmet, `express-rate-limit`, JWT, Node `crypto` (`timingSafeEqual`) | OWASP header hardening, brute-force mitigation, tamper-proof pass verification, stateless auth. |
+</div>
 
 ---
 
-## 🏛️ Relational Hierarchy & Data Model
+## Overview
 
-The physical space is structured as a strict 3-tier parent-child hierarchy:
+Parkora eliminates parking congestion at high-density transit nodes and commercial hubs, including **Kannur Central Bus Terminal**, **Kannur Railway Station Complex**, **Payyambalam Beach**, and multi-level parking lots.
 
-[ParkingLocation] (Kannur Rly Stn, Central Bus Terminal, Payyambalam Beach)
-│ 1:N
-▼
-[Floor] (Level 0 / Ground, Level 1)
-│ 1:N
-▼
-[ParkingBay] (Bay G-01 to G-20) ◄── [Document Write-Lock: __v]
-│ 1:N
-▼
-[Booking] ──► Associated with [User] & [ParkingEvent] Audit Trail
+Most parking apps stop at the driver's booking screen. Parkora is an end-to-end, multi-tenant operations system with strictly partitioned portals for:
 
+| Portal | Audience | Purpose |
+| --- | --- | --- |
+| **Storefront** | Drivers / Customers | Discover hubs, reserve bays, receive a QR pass |
+| **Gate Station** | Duty Staff | Verify passes, run walk-in bookings, clear exits and overstays |
+| **Management Core** | Administrators | Monitor live telemetry, build facilities, manage shift rosters |
 
-- **Compound Unique Index:** `{ floor: 1, bayNumber: 1 }` guarantees that duplicate bay identifiers can never be created on the same floor level, even under concurrent admin operations.
-- **Fast Lookup Index:** `{ bay: 1, status: 1, startTime: 1, endTime: 1 }` accelerates non-overlapping interval lookups.
+> **Try it now:** [parkora-kannur.vercel.app](https://parkora-kannur.vercel.app). Demo credentials are listed [below](#demo-credentials).
 
----
+## Table of Contents
 
-## ⚡ Concurrency Engineering: Eliminating TOCTOU Double-Bookings
+- [Multi-Portal Architecture](#multi-portal-architecture)
+- [Features by Role](#features-by-role)
+- [Operational Rules & Timing Thresholds](#operational-rules--timing-thresholds)
+- [Demo Credentials](#demo-credentials)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [API Reference](#api-reference)
+- [Deployment](#deployment)
+- [Author](#author)
 
-### The Vulnerability: Time-of-Check to Time-of-Use (TOCTOU)
-When two drivers attempt to book Bay `G-01` for overlapping time slots at the exact same millisecond:
-1. **Req 1** queries MongoDB: *"Is Bay G-01 booked between 14:00 and 16:00?"* $\rightarrow$ Returns empty.
-2. **Req 2** queries MongoDB simultaneously: *"Is Bay G-01 booked?"* $\rightarrow$ Returns empty.
-3. Both requests run `Booking.create()`, resulting in two active bookings for the same physical slot.
+<!--
+## Screenshots
+Add screenshots or a demo GIF here, for example:
+![Customer booking flow](docs/screenshots/booking.png)
+![Staff gate terminal](docs/screenshots/staff.png)
+![Admin dashboard](docs/screenshots/admin.png)
+-->
 
-### The Interval Overlap Condition
-Two intervals $[A_{start}, A_{end}]$ and $[B_{start}, B_{end}]$ conflict if and only if:
-$$\text{ReqStart} < \text{BookEnd} \quad \land \quad \text{ReqEnd} > \text{BookStart}$$
+## Multi-Portal Architecture
 
-### The ACID Solution: Pessimistic Bay Write-Locking
-Inserting two independent documents into the `bookings` collection does not create an automatic write conflict in MongoDB. Parkora forces contention onto the shared `ParkingBay` document inside a MongoDB Session Transaction:
+Parkora enforces strict **Role-Based Access Control (RBAC)** on both the client routing layer (`ProtectedRoute.jsx`) and the backend Express middleware (`protect`, `authorize`).
 
-// 1. Acquire atomic write-lock on the specific bay document
-const bay = await ParkingBay.findOneAndUpdate(
-  { _id: bayId, status: { $ne: 'maintenance' }, isEnabled: {$ne: false } },
-  { $inc: { __v: 1 } }, // Forces MongoDB to serialize transactions targeting this bay
-  { session, new: true }
-);
+```mermaid
+flowchart TD
+    Router["Parkora Access Router<br/>JWT + RBAC"]
+    Router --> Customer["Customer Storefront<br/>Hub Explorer · Bay Selector · QR Pass"]
+    Router --> Staff["Duty Staff Station<br/>Gate Verify · Walk-In Desk · Overstay Clearance"]
+    Router --> Admin["Administrator Console<br/>Telemetry · Facility Builder · Dual Shifts"]
+```
 
-// 2. Perform interval conflict query within the isolated transaction
-const existingConflict = await Booking.findOne({
-  bay: bayId,
-  status: { $in: ['confirmed', 'active', 'pending'] },$and: [
-    { startTime: { $lt: reqEnd } },
-    { endTime: { $gt: reqStart } }
-  ]
-}).session(session);
+- **Strict path isolation:** Staff cannot browse consumer catalogs (`/locations`). Customers cannot reach gate controls (`/staff/*`) or configuration (`/admin/*`).
+- **Silent route bouncing:** A role mismatch redirects the user straight to their authorized dashboard, with no browser alerts.
 
-if (existingConflict) {
-  await session.abortTransaction();
-  return res.status(409).json({ success: false, message: 'Bay conflict: slot already reserved.' });
-}
+## Features by Role
 
+### 🚗 Driver / Customer Storefront
 
+- **Facility discovery:** Browse public hubs with live tariff details (hourly base rate), operating hours, and amenities (CCTV, EV charging, 24/7 access).
+- **Collision-proof bay booking:** Server-side interval evaluation prevents double-booking across overlapping arrival and departure windows.
+- **Hashed QR passes:** Every booking generates a digital pass with a SHA-256 token hash that gate scanners can verify.
 
-Result: The second competing request is serialized behind the first. Once executed, it detects the newly committed booking and is cleanly aborted with an HTTP 409 Conflict.
+### 🛂 Staff Gate & Duty Station (`/staff`)
 
-🛡️ Production Hardening & Operational Policies
+- **Duty-window lockout:** Shifts are validated against Indian Standard Time (IST, UTC+5:30). Off-duty operators cannot verify tickets, complete check-ins, or issue walk-in passes.
+- **Walk-in counter terminal:**
+  - On-the-spot bay reservations locked to the operator's assigned facility
+  - Settlement by physical **cash collection** or a **test UPI QR** simulation
+- **Gate pass verification:**
+  - Verify by QR token or booking reference (`KSP-XXXXXX-XXX`)
+  - Enforces the 5-minute early-entry window and 15-minute no-show cancellation
+- **Check-out & overstay billing:**
+  - 7-minute departure grace period with no overtime fee
+  - Automatic surcharge for departures beyond the grace period
+- **Demo utilities:**
+  - `/staff/auto-switch-duty` switches to the rostered operator for rapid shift-handover demos
+  - A toggleable **Auto-Discharge on Expiry** simulation clears parked bays when their scheduled duration ends
 
-Gate Pass Security: Digital passes do not embed plaintext IDs. The server generates a high-entropy 32-byte secret (crypto.randomBytes(32)). Only its SHA-256 hash is saved (select: false). The gate scans bookingRef:rawSecret and validates it using crypto.timingSafeEqual().
+### 📊 Admin Operations Console (`/admin`)
 
-Automated Lifecycle Engine: A node-cron worker runs every 5 minutes. Bookings unattended 30 minutes past startTime are marked no_show, freeing the bay for walk-ins. Active reservations exceeding endTime are flagged with isOverstay: true.
+- **Real-time telemetry:** Live bay occupancy ratios in interactive Recharts donut charts, plus revenue breakdown per facility.
+- **Facility structure builder:** Add floors and configure bay capacity, vehicle type restrictions (`car`, `bike`, `ev`, `heavy`), and bay-specific pricing overrides.
+- **Dual-shift roster management:** Assign staff across two equal shift blocks (Shift 1 / Shift 2), with overlap alerts for cross-assigned personnel.
+- **Audit & handover ledger:** A real-time event log of duty logins, QR scans, check-outs, and walk-in passes.
 
-Location-Specific Constraints: Payyambalam Beach strictly enforces operating hours between 05:00 and 22:00 IST on both frontend date-pickers and backend controllers.
+## Operational Rules & Timing Thresholds
 
-Anti-Hoarding Quotas: Users are capped at 2 active/upcoming reservations concurrently, a maximum 48-hour advance booking window, and a 24-hour duration limit per reservation.
+| Scenario | Condition | Enforced Action |
+| --- | --- | --- |
+| **Early arrival** | `arrival < start − 5 min` | Gate verification blocked; earliest allowed check-in time is shown |
+| **Valid entry** | `start − 5 min ≤ arrival ≤ start + 15 min` | Pass approved; check-in recorded; bay marked active |
+| **No-show expiry** | `now > start + 15 min` | Auto-cancelled by the background lifecycle worker; bay released |
+| **Exit grace** | `exit ≤ end + 7 min` | Departure finalized with no penalty |
+| **Overtime penalty** | `exit > end + 7 min` | Surcharge billed (formula below) |
 
-Session Revocation: JWT checks look up isActive !== false on every request. Deactivating staff immediately blocks gate access without waiting for token expiry.
+$$
+\text{Overstay Fee (₹)} = \left\lceil \frac{\text{Overstay Minutes}}{60} \right\rceil \times \text{Hourly Rate}
+$$
 
-🚦 Dual Payment Workflow
+A `node-cron` background worker sweeps every 60 seconds to cancel no-shows and advance booking lifecycle states.
 
-Online (Razorpay Test Mode):
+## Demo Credentials
 
-POST /api/bookings/order-razorpay generates an order in integer paise.
+Pre-seeded accounts for exploring each role-isolated portal:
 
-Razorpay Modal opens on the client for mock UPI/Card payment.
+| Role | Email | Password | Access |
+| --- | --- | --- | --- |
+| System Admin | `admin@parkora.in` | `Admin@123` | Global metrics, facility builder, shift rosters |
+| Duty Staff (Shift 1) | `staff1@parkora.in` | `Staff@123` | Kannur Central Bus Terminal, 06:00 – 18:00 IST |
+| Duty Staff (Shift 2) | `staff2@parkora.in` | `Staff@123` | Kannur Central Bus Terminal, 18:00 – 06:00 IST |
+| Customer | `customer@parkora.in` | `Customer@123` | Hub search, bay reservations, digital pass |
 
-POST /api/bookings/verify-razorpay verifies the HMAC SHA-256 signature and atomically secures the bay.
+> [!TIP]
+> If you open the staff terminal outside an assigned shift window, click **Auto-Switch to On-Duty Staff** to switch to the operator rostered for the current shift.
 
-Pay at Facility Gate: Drivers receive an instant QR ticket and pay the gate attendant via cash or UPI upon exit. Attendants record amountCollectedPaise during check-out for audit reconciliation.
+> [!NOTE]
+> These are demo accounts for evaluation only. Never reuse these credentials, or the default `JWT_SECRET`, in a real deployment.
 
-🚀 Local Development Setup
+## Tech Stack
 
-1. Clone & Install from git
-git clone [https://github.com/your-username/parkora.git](https://github.com/your-username/parkora.git)
+| Layer | Technologies |
+| --- | --- |
+| **Frontend** | React 18, React Router v6, Tailwind CSS, Framer Motion, Lucide React, Recharts, QRCode.react, Axios |
+| **Backend** | Node.js, Express.js |
+| **Database** | MongoDB with Mongoose (sessions and multi-document transactions) |
+| **Auth & Security** | Stateless JWT, role-based middleware, bcryptjs password hashing, SHA-256 QR token hashing |
+| **Automation** | `node-cron` background worker (60-second lifecycle sweep) |
+| **Hosting** | Vercel (client), Render (API), MongoDB Atlas (database) |
+
+## Project Structure
+
+```text
+parkora/
+├── client/
+│   └── src/
+│       ├── api/                      # Axios instance with auth interceptors
+│       ├── components/               # Navbar, ProtectedRoute, ScrollToTop
+│       ├── context/                  # AuthContext (JWT state & user credentials)
+│       ├── pages/
+│       │   ├── Home.jsx              # Public landing page
+│       │   ├── Login.jsx             # Role-routed authentication
+│       │   ├── Locations.jsx         # Public parking hubs catalog
+│       │   ├── BookingFlow.jsx       # Customer bay selector & checkout
+│       │   ├── Ticket.jsx            # Digital pass with QR token
+│       │   ├── StaffHome.jsx         # Staff overview & schedule banner
+│       │   ├── StaffPortal.jsx       # Gate verification & check-out desk
+│       │   ├── StaffBookCustomer.jsx # Walk-in desk (Cash / UPI QR)
+│       │   ├── StaffTodayBookings.jsx# Daily facility arrivals ledger
+│       │   └── AdminDashboard.jsx    # Telemetry, layout builder, rosters
+│       └── App.jsx
+└── server/
+    ├── config/                       # MongoDB connection
+    ├── controllers/                  # admin, staff, booking controllers
+    ├── jobs/                         # bookingLifecycleJob.js (cron cleanup)
+    ├── middleware/                   # auth.js (JWT extraction & role guards)
+    ├── models/                       # Booking, ParkingLocation, Floor, ParkingBay, User
+    ├── routes/                       # admin, staff, booking, auth routes
+    ├── utils/                        # shiftHelper.js (IST duty calculation)
+    └── server.js                     # Express bootstrap
+```
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18 or later
+- A MongoDB instance (local or [MongoDB Atlas](https://www.mongodb.com/atlas))
+
+> [!IMPORTANT]
+> Booking uses MongoDB multi-document transactions, which require a **replica set**. A standalone local `mongod` will not work. Use MongoDB Atlas (free tier) or run a local replica set.
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/sayanthkv/parkora.git
 cd parkora
+```
 
-# Install server dependencies
+### 2. Set up the backend
+
+```bash
 cd server
 npm install
+```
 
-# Install client dependencies
+Create `server/.env` (see [Environment Variables](#environment-variables)), then seed the database and start the server:
+
+```bash
+npm run seed   # seeds facilities, bays, and demo accounts
+npm run dev
+```
+
+### 3. Set up the frontend
+
+```bash
 cd ../client
 npm install
+```
 
+Create `client/.env`, then start the dev server:
 
-2. Configure Environment Variables
-
-server/.env:
-PORT=5000
-MONGO_URI=mongodb+srv://<yourusername>:<yourpassword>@cluster.mongodb.net/parkora?retryWrites=true&w=majority
-JWT_SECRET=your_super_secret_jwt_key
-RAZORPAY_KEY_ID=rzp_test_yourKeyId
-RAZORPAY_KEY_SECRET=yourKeySecret
-CLIENT_URL=http://localhost:5173
-
-
-client/.env:
-VITE_API_BASE_URL=http://localhost:5000/api
-VITE_RAZORPAY_KEY_ID=rzp_test_yourKeyId
-
-
-
-3. Run Application
-# In server directory
+```bash
 npm run dev
-# In client directory
-npm run dev
+```
+
+Open **http://localhost:5173** in your browser.
+
+## Environment Variables
+
+**`server/.env`**
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| `PORT` | API server port | `5000` |
+| `MONGO_URI` | MongoDB connection string (replica set required) | `mongodb+srv://<user>:<pass>@<cluster>/parkora` |
+| `JWT_SECRET` | Secret used to sign JWTs | `your_jwt_private_key_here` |
+| `CLIENT_URL` | Allowed frontend origin (CORS) | `http://localhost:5173` |
+
+**`client/.env`**
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | Base URL of the API | `http://localhost:5000/api` |
+
+## API Reference
+
+All Staff and Admin endpoints require a valid JWT and the matching role.
+
+### Staff Operations: `/api/staff`
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/api/staff/shift-context` | Operator duty status, personal roster, and facility shift data |
+| `POST` | `/api/staff/verify` | Validates gate QR passes against facility scoping and arrival buffers |
+| `POST` | `/api/staff/check-in/:bookingId` | Approves vehicle entry and marks the session active |
+| `POST` | `/api/staff/check-out/:bookingId` | Finalizes departure and assesses overtime past the 7-minute grace |
+| `POST` | `/api/staff/book-customer` | Issues a walk-in pass with cash or test UPI settlement |
+| `POST` | `/api/staff/toggle-auto-complete` | Toggles the automated discharge simulation |
+
+### Administrator Suite: `/api/admin`
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/api/admin/metrics` | System-wide capacity, live occupancy, and revenue |
+| `GET` | `/api/admin/locations-shifts` | Facilities with their rostered operators |
+| `POST` | `/api/admin/locations` | Adds a parking facility with coordinates and rates |
+| `POST` | `/api/admin/locations/:id/floors` | Creates a floor within a facility |
+| `POST` | `/api/admin/locations/:id/floors/:floorId/bays` | Adds bay slots with vehicle type classification |
+| `PATCH` | `/api/admin/staff/:id/assign-shift` | Reassigns staff across the two shift blocks |
+| `GET` | `/api/admin/staff-activity` | Audit log of all check-ins, exits, and handovers |
+
+## Deployment
+
+| Service | Hosts | Notes |
+| --- | --- | --- |
+| **Vercel** | React client | Set `VITE_API_BASE_URL` to your API URL |
+| **Render** | Express API | Set `MONGO_URI`, `JWT_SECRET`, and `CLIENT_URL` (your Vercel URL) |
+| **MongoDB Atlas** | Database | Replica set by default, so transactions work out of the box |
+
+> [!NOTE]
+> On Render's free tier the API sleeps when idle, so the first request after a quiet period can take 30–60 seconds.
+
+## Author
+
+**Sayanth KV** (Sayanth Sajeevan), MERN Stack Developer
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-sayanth--thedeveloper-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/sayanth-thedeveloper)
+[![GitHub](https://img.shields.io/badge/GitHub-sayanthkv-181717?logo=github&logoColor=white)](https://github.com/sayanthkv)
+[![Email](https://img.shields.io/badge/Email-sayanthsajeev363%40gmail.com-D14836?logo=gmail&logoColor=white)](mailto:sayanthsajeev363@gmail.com)
+
+---
+
+<div align="center">
+
+If you find Parkora useful, consider giving it a ⭐. Feedback and suggestions are welcome!
+
+</div>
