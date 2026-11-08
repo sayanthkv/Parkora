@@ -186,7 +186,7 @@ exports.getTodayOverview = async (req, res) => {
   }
 };
 
-// @desc    Verify QR token or Booking Reference (Guards shift duty & arrival window)
+// @desc    Verify QR token, Booking Reference, or Customer Phone Number
 // @route   POST /api/staff/verify
 // @access  Private (Staff)
 exports.verifyTicket = async (req, res) => {
@@ -200,23 +200,61 @@ exports.verifyTicket = async (req, res) => {
     const shiftInfo = getActiveShiftDetails(facility.name);
     const userSlot = (staff.shiftSlot || 'shift_1').toLowerCase();
 
-    // 1. STRICT SHIFT DUTY CHECK: Off-duty staff cannot verify passes
+    // Strict duty guard
     const isOnDuty = Boolean(shiftInfo.activeSlot && userSlot === shiftInfo.activeSlot);
     if (!isOnDuty) {
       return res.status(403).json({
         success: false,
         isValid: false,
-        message: `Duty Window Locked: You are currently off duty (${shiftInfo.roster[userSlot] || 'Your Roster'}). Only on-duty personnel rostered for ${shiftInfo.label || 'Active Shift'} can scan and verify gate passes.`,
+        message: `Duty Window Locked: You are currently off duty. Only on-duty personnel rostered for ${shiftInfo.label || 'Active Shift'} can scan and verify gate passes.`,
       });
     }
 
     const { bookingRef, qrToken } = req.body;
-    let booking = null;
+    const queryInput = (bookingRef || qrToken || '').trim();
 
-    if (bookingRef) {
-      booking = await populateBookingRecord(Booking.findOne({ bookingRef: bookingRef.trim().toUpperCase() }));
-    } else if (qrToken && qrToken.includes(':')) {
-      const [tokenRef, rawSecret] = qrToken.split(':');
+    if (!queryInput) {
+      return res.status(400).json({ success: false, isValid: false, message: 'Please provide a QR token, booking reference, or phone number.' });
+    }
+
+    let booking = null;
+    const cleanDigits = queryInput.replace(/\D/g, '');
+
+    // 1. PHONE NUMBER LOOKUP (10-digit mobile number)
+    if (cleanDigits.length >= 10 && !queryInput.toUpperCase().startsWith('KSP-') && !queryInput.includes(':')) {
+      const targetUser = await User.findOne({
+        phone: { $regex: cleanDigits.slice(-10) + '$' }
+      });
+
+      if (!targetUser) {
+        return res.status(404).json({ success: false, isValid: false, message: `No registered customer found for phone ending in ${cleanDigits.slice(-10)}.` });
+      }
+
+      // Fetch only upcoming or currently active passes for this user at this facility
+      const now = new Date();
+      const upcomingBookings = await populateBookingRecord(
+        Booking.find({
+          user: targetUser._id,
+          location: facility._id,
+          status: { $in: ['confirmed', 'active'] },
+          endTime: { $gte: now },
+        }).sort({ startTime: 1 })
+      );
+
+      if (!upcomingBookings || upcomingBookings.length === 0) {
+        return res.status(404).json({
+          success: false,
+          isValid: false,
+          message: `No active or upcoming reservations found for ${targetUser.name || 'this customer'} at this facility today.`
+        });
+      }
+
+      // If multiple upcoming bookings exist, return the earliest upcoming one
+      booking = upcomingBookings[0];
+    } 
+    // 2. CRYPTOGRAPHIC QR TOKEN LOOKUP (Format: Ref:RawSecret)
+    else if (queryInput.includes(':')) {
+      const [tokenRef, rawSecret] = queryInput.split(':');
       const expectedHash = crypto.createHash('sha256').update(rawSecret).digest('hex');
 
       booking = await populateBookingRecord(Booking.findOne({ bookingRef: tokenRef.trim().toUpperCase() }));
@@ -229,16 +267,20 @@ exports.verifyTicket = async (req, res) => {
           storedHashBuf.length !== calcHashBuf.length ||
           !crypto.timingSafeEqual(storedHashBuf, calcHashBuf)
         ) {
-          return res.status(400).json({ success: false, isValid: false, message: 'Cryptographic QR token mismatch.' });
+          return res.status(400).json({ success: false, isValid: false, message: 'Cryptographic QR token mismatch or invalid ticket signature.' });
         }
       }
+    } 
+    // 3. DIRECT ALPHANUMERIC REFERENCE LOOKUP (e.g. KSP-123456-789)
+    else {
+      booking = await populateBookingRecord(Booking.findOne({ bookingRef: queryInput.toUpperCase() }));
     }
 
     if (!booking) {
-      return res.status(404).json({ success: false, isValid: false, message: 'Reservation not found.' });
+      return res.status(404).json({ success: false, isValid: false, message: 'Reservation pass not found.' });
     }
 
-    // Facility scoping guard
+    // Facility Scoping Guard
     if (String(booking.location?._id || booking.location) !== String(facility._id)) {
       return res.status(403).json({
         success: false,

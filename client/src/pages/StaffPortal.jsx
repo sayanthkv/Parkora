@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import API from '../api/axios';
 import {
   QrCode, Search, CheckCircle2, XCircle, Clock,
-  Car, User, ShieldCheck, ArrowRight, AlertTriangle, RefreshCw, Activity, ArrowLeftRight, Building, Check, ToggleLeft, ToggleRight, Lock
+  Car, User, ShieldCheck, ArrowRight, AlertTriangle, RefreshCw, Activity, ArrowLeftRight, Building, Check, ToggleLeft, ToggleRight, Lock, Camera, X, Usb, Monitor
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 
 export default function StaffPortal() {
   const navigate = useNavigate();
@@ -24,6 +25,13 @@ export default function StaffPortal() {
   const [switchingDuty, setSwitchingDuty] = useState(false);
   const [error, setError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+
+  // Optical Scanner States
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [selectedDeviceName, setSelectedDeviceName] = useState('Default Sensor');
+  const [externalNotFound, setExternalNotFound] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const scannerRef = useRef(null);
 
   useEffect(() => {
     if (user && user.role === 'admin') {
@@ -85,13 +93,13 @@ export default function StaffPortal() {
     }
   };
 
-  const handleVerify = async (e) => {
-    if (e) e.preventDefault();
+  const executeVerify = async (queryValue) => {
+    const query = (queryValue || searchQuery).trim();
     if (!isOnDuty) {
       setError('Verification Locked: You cannot verify or scan tickets while off duty.');
       return;
     }
-    if (!searchQuery.trim()) return;
+    if (!query) return;
 
     setLoadingVerify(true);
     setError(null);
@@ -99,9 +107,7 @@ export default function StaffPortal() {
     setVerificationResult(null);
 
     try {
-      const isRef = searchQuery.toUpperCase().startsWith('KSP-');
-      const payload = isRef ? { bookingRef: searchQuery.trim().toUpperCase() } : { qrToken: searchQuery.trim() };
-
+      const payload = { bookingRef: query };
       const res = await API.post('/staff/verify', payload);
       setVerificationResult(res.data);
     } catch (err) {
@@ -118,6 +124,75 @@ export default function StaffPortal() {
     } finally {
       setLoadingVerify(false);
     }
+  };
+
+  const handleVerify = (e) => {
+    if (e) e.preventDefault();
+    executeVerify(searchQuery);
+  };
+
+  // Dedicated / External Hardware Scanner Invocation
+  const startScanner = async () => {
+    if (!isOnDuty) {
+      setError('Scanner Locked: You must be on duty to scan gate passes.');
+      return;
+    }
+    setScannerOpen(true);
+    setExternalNotFound(false);
+    setError(null);
+
+    setTimeout(async () => {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        setAvailableCameras(devices || []);
+
+        // Detect external USB / optical device vs integrated webcam
+        const externalDevice = devices?.find((d) => {
+          const name = d.label.toLowerCase();
+          return name.includes('scanner') || name.includes('external') || name.includes('usb') || name.includes('back');
+        });
+
+        const targetDeviceId = externalDevice?.id || devices?.[0]?.id;
+        setSelectedDeviceName(externalDevice?.label || devices?.[0]?.label || 'Standard Camera Sensor');
+
+        if (!targetDeviceId) {
+          setExternalNotFound(true);
+          return;
+        }
+
+        const html5QrCode = new Html5Qrcode("reader");
+        scannerRef.current = html5QrCode;
+
+        await html5QrCode.start(
+          targetDeviceId,
+          {
+            fps: 15,
+            qrbox: { width: 260, height: 260 },
+            aspectRatio: 1.0,
+          },
+          (decodedText) => {
+            stopScanner();
+            setSearchQuery(decodedText);
+            executeVerify(decodedText);
+          },
+          () => {}
+        );
+      } catch (err) {
+        setExternalNotFound(true);
+      }
+    }, 200);
+  };
+
+  const stopScanner = async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
+      } catch (e) {}
+      scannerRef.current = null;
+    }
+    setScannerOpen(false);
+    setExternalNotFound(false);
   };
 
   const handleCheckIn = async (bookingId) => {
@@ -265,7 +340,7 @@ export default function StaffPortal() {
         )}
       </div>
 
-      {/* Main Terminal Header with Test Simulation Toggle */}
+      {/* Main Terminal Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
@@ -273,7 +348,7 @@ export default function StaffPortal() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-slate-900 tracking-tight">Access Gate & Verification Terminal</h1>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Exit Protocol: <strong>7-minute grace period</strong> on departure. Overstay past 7 mins incurs an hourly overtime charge.
+            Verification Protocol: Type <strong>Booking Ref</strong>, <strong>Customer Phone (+91)</strong>, or trigger <strong>Optical Scanner</strong>.
           </p>
         </div>
 
@@ -308,7 +383,7 @@ export default function StaffPortal() {
         <div className="lg:col-span-7 space-y-6">
           <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-heading font-bold text-slate-900">Verify Ticket or QR Token</h2>
+              <h2 className="text-base font-heading font-bold text-slate-900">Verify Pass by Ref, Phone or Optical Scanner</h2>
               {!isOnDuty && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-lg">
                   <Lock className="w-3.5 h-3.5" /> Verification Disabled (Off Duty)
@@ -318,25 +393,38 @@ export default function StaffPortal() {
 
             <form onSubmit={handleVerify} className="space-y-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                Booking Reference or Scanned QR String
+                Booking Reference, QR Token, or Customer Phone Number (+91)
               </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
+              <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     disabled={!isOnDuty}
-                    placeholder={isOnDuty ? "e.g. KSP-123456-789 or QR Payload..." : "Terminal locked: only on-duty operators can verify"}
+                    placeholder={isOnDuty ? "e.g. KSP-123456-789 or 9876543210..." : "Terminal locked: only on-duty operators can verify"}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm uppercase font-mono font-bold tracking-wider text-slate-900 outline-none focus:border-[#0B3D2E] disabled:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold tracking-wider text-slate-900 outline-none focus:border-[#0B3D2E] disabled:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
                     required
                   />
                 </div>
+
+                {/* Optical Scanner / Camera Trigger (Visible on Laptop and Mobile) */}
+                <button
+                  type="button"
+                  disabled={!isOnDuty}
+                  onClick={startScanner}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                  title="Scan with Connected Device or Camera"
+                >
+                  <Camera className="w-4 h-4 text-[#0B3D2E]" />
+                  <span className="text-xs font-bold">Scan QR</span>
+                </button>
+
                 <button
                   type="submit"
                   disabled={loadingVerify || !isOnDuty}
-                  className="px-6 py-2.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className="px-6 py-2.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 whitespace-nowrap"
                 >
                   {loadingVerify ? 'Verifying...' : 'Verify'}
                 </button>
@@ -401,6 +489,16 @@ export default function StaffPortal() {
                     )}
                   </div>
                 )}
+
+                {/* Customer Particulars Row */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <User className="w-3.5 h-3.5 text-[#0B3D2E]" />
+                    <span className="font-bold text-slate-900">{bookingData.user?.name || 'Customer'}</span>
+                    <span className="text-slate-400 font-medium">({bookingData.user?.phone || 'No phone attached'})</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">{bookingData.user?.email}</span>
+                </div>
 
                 {/* Data Grid */}
                 <div className="grid grid-cols-2 gap-4 text-xs font-medium">
@@ -515,7 +613,7 @@ export default function StaffPortal() {
                       onClick={() => {
                         if (isOnDuty) {
                           setSearchQuery(session.bookingRef);
-                          handleVerify();
+                          executeVerify(session.bookingRef);
                         }
                       }}
                       className={`p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between transition-colors ${
@@ -540,6 +638,60 @@ export default function StaffPortal() {
         </div>
 
       </div>
+
+      {/* OPTICAL SCANNER MODAL (SUPPORTS USB SCANNER & WEBCAM) */}
+      {scannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 text-center relative shadow-2xl">
+            <button
+              onClick={stopScanner}
+              className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 bg-[#0B3D2E] text-[#F2B705] px-3.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2">
+                <Usb className="w-3.5 h-3.5" /> Optical Gate Scanner
+              </div>
+              <h3 className="font-heading font-extrabold text-base text-slate-900">
+                Connected Device Scanner
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Target Sensor: <strong className="text-slate-800">{selectedDeviceName}</strong>
+              </p>
+            </div>
+
+            {externalNotFound ? (
+              <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-3">
+                <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                  <Monitor className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-slate-900">No External Optical Scanner Detected</h4>
+                <p className="text-slate-500 leading-relaxed text-[11px]">
+                  No dedicated USB barcode or plug-and-play optical reader was detected on this workstation.
+                </p>
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-left text-[11px]">
+                  <strong>Hardware Tip:</strong> Standard handheld USB QR scanners function as keyboard emulators (wedge mode). Pointing the scanner at the ticket will automatically enter the code into the verification input.
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border-2 border-[#0B3D2E] bg-slate-950 aspect-square flex items-center justify-center relative">
+                <div id="reader" className="w-full h-full"></div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={stopScanner}
+              className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+            >
+              Close Scanner
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
