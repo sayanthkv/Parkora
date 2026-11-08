@@ -26,7 +26,6 @@ import ScrollToTop from './components/ScrollToTop';
 function App() {
   return (
     <Router>
-
       <ScrollToTop />
       <div className="flex flex-col min-h-screen bg-white text-[#14201B] w-full font-body">
         <Navbar />
@@ -37,11 +36,10 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/locations" element={<Locations />} />
 
             {/* Customer Only / Authenticated User Routes */}
             <Route element={<ProtectedRoute allowedRoles={['customer', 'admin']} />}>
-            <Route path="/locations" element={<Locations />} />
+              <Route path="/locations" element={<Locations />} />
               <Route path="/book/:slug" element={<BookingFlow />} />
               <Route path="/ticket/:bookingRef" element={<Ticket />} />
               <Route path="/my-bookings" element={<MyBookings />} />
