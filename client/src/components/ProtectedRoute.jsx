@@ -24,12 +24,12 @@ const ProtectedRoute = ({ allowedRoles }) => {
   // Strict role boundaries
   if (allowedRoles && !allowedRoles.includes(userRole)) {
     if (userRole === 'staff') {
-      alert('You are currently on a Staff account. Access to customer reservation portals is restricted.');
+    
       return <Navigate to="/staff" replace />;
     }
 
     if (userRole === 'customer') {
-      alert('Access restricted: Staff operator credentials required.');
+    
       return <Navigate to="/locations" replace />;
     }
 

@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import API from '../api/axios';
 import { MapPin, Clock, ShieldCheck, Zap, ArrowRight, Filter } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Locations() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,16 @@ export default function Locations() {
     };
     fetchLocations();
   }, []);
+
+  useEffect(() => {
+    if (user?.role === 'staff') {
+      navigate('/staff', { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (user?.role === 'staff') {
+    return null;
+  }
 
   const filteredLocations = locations.filter((loc) => {
     const matchesQuery =

@@ -37,6 +37,7 @@ function App() {
 
             {/* Customer Only / Authenticated User Routes */}
             <Route element={<ProtectedRoute allowedRoles={['customer', 'admin']} />}>
+            <Route path="/locations" element={<Locations />} />
               <Route path="/book/:slug" element={<BookingFlow />} />
               <Route path="/ticket/:bookingRef" element={<Ticket />} />
               <Route path="/my-bookings" element={<MyBookings />} />

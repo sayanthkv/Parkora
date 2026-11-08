@@ -186,11 +186,30 @@ exports.getTodayOverview = async (req, res) => {
   }
 };
 
-// @desc    Verify QR token or Booking Reference (Enforces 5-min early & 15-min auto-cancel)
+// @desc    Verify QR token or Booking Reference (Guards shift duty & arrival window)
 // @route   POST /api/staff/verify
 // @access  Private (Staff)
 exports.verifyTicket = async (req, res) => {
   try {
+    const staff = await User.findById(req.user.id).populate('assignedFacility');
+    if (!staff || !staff.assignedFacility) {
+      return res.status(400).json({ success: false, isValid: false, message: 'Staff account has no assigned facility.' });
+    }
+
+    const facility = staff.assignedFacility;
+    const shiftInfo = getActiveShiftDetails(facility.name);
+    const userSlot = (staff.shiftSlot || 'shift_1').toLowerCase();
+
+    // 1. STRICT SHIFT DUTY CHECK: Off-duty staff cannot verify passes
+    const isOnDuty = Boolean(shiftInfo.activeSlot && userSlot === shiftInfo.activeSlot);
+    if (!isOnDuty) {
+      return res.status(403).json({
+        success: false,
+        isValid: false,
+        message: `Duty Window Locked: You are currently off duty (${shiftInfo.roster[userSlot] || 'Your Roster'}). Only on-duty personnel rostered for ${shiftInfo.label || 'Active Shift'} can scan and verify gate passes.`,
+      });
+    }
+
     const { bookingRef, qrToken } = req.body;
     let booking = null;
 
@@ -219,12 +238,8 @@ exports.verifyTicket = async (req, res) => {
       return res.status(404).json({ success: false, isValid: false, message: 'Reservation not found.' });
     }
 
-    const staff = await User.findById(req.user.id);
-    if (
-      staff &&
-      staff.assignedFacility &&
-      String(booking.location?._id || booking.location) !== String(staff.assignedFacility)
-    ) {
+    // Facility scoping guard
+    if (String(booking.location?._id || booking.location) !== String(facility._id)) {
       return res.status(403).json({
         success: false,
         isValid: false,
@@ -255,7 +270,7 @@ exports.verifyTicket = async (req, res) => {
       });
     }
 
-    // Rule 1: No entry earlier than 5 minutes before scheduled start time
+    // Rule 1: No verification earlier than 5 minutes before scheduled start time
     if (diffMinutes < -5) {
       const allowedTimeStr = new Date(startTime.getTime() - 5 * 60 * 1000).toLocaleTimeString([], {
         hour: '2-digit',
@@ -296,14 +311,28 @@ exports.verifyTicket = async (req, res) => {
   }
 };
 
-// @desc    Check-In vehicle
+// @desc    Check-In vehicle (Guards shift duty & timing window)
 // @route   POST /api/staff/check-in/:bookingId
 // @access  Private (Staff)
 exports.checkIn = async (req, res) => {
   try {
-    const staff = await User.findById(req.user.id);
-    const booking = await Booking.findById(req.params.bookingId);
+    const staff = await User.findById(req.user.id).populate('assignedFacility');
+    if (!staff || !staff.assignedFacility) {
+      return res.status(400).json({ success: false, message: 'Staff has no assigned facility.' });
+    }
 
+    const shiftInfo = getActiveShiftDetails(staff.assignedFacility.name);
+    const userSlot = (staff.shiftSlot || 'shift_1').toLowerCase();
+    const isOnDuty = Boolean(shiftInfo.activeSlot && userSlot === shiftInfo.activeSlot);
+
+    if (!isOnDuty) {
+      return res.status(403).json({
+        success: false,
+        message: 'Action Blocked: You are off duty. Only the on-duty staff operator can check in arriving vehicles.',
+      });
+    }
+
+    const booking = await Booking.findById(req.params.bookingId);
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found.' });
     }
@@ -364,9 +393,23 @@ exports.checkIn = async (req, res) => {
 // @access  Private (Staff)
 exports.checkOut = async (req, res) => {
   try {
-    const staff = await User.findById(req.user.id);
-    const booking = await populateBookingRecord(Booking.findById(req.params.bookingId));
+    const staff = await User.findById(req.user.id).populate('assignedFacility');
+    if (!staff || !staff.assignedFacility) {
+      return res.status(400).json({ success: false, message: 'Staff has no assigned facility.' });
+    }
 
+    const shiftInfo = getActiveShiftDetails(staff.assignedFacility.name);
+    const userSlot = (staff.shiftSlot || 'shift_1').toLowerCase();
+    const isOnDuty = Boolean(shiftInfo.activeSlot && userSlot === shiftInfo.activeSlot);
+
+    if (!isOnDuty) {
+      return res.status(403).json({
+        success: false,
+        message: 'Action Blocked: You are off duty. Only the on-duty staff operator can finalize vehicle checkout.',
+      });
+    }
+
+    const booking = await populateBookingRecord(Booking.findById(req.params.bookingId));
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found.' });
     }
@@ -382,7 +425,7 @@ exports.checkOut = async (req, res) => {
     let overstayFeeRupees = 0;
     let extraHoursBilled = 0;
 
-    // 7-minute grace threshold
+    // 7-minute grace period threshold
     if (overstayMinutes > 7) {
       extraHoursBilled = Math.ceil(overstayMinutes / 60);
       const hourlyRate = booking.bay?.customHourlyRate ?? booking.location?.pricing?.hourlyRate ?? 20;
@@ -430,179 +473,182 @@ exports.checkOut = async (req, res) => {
   }
 };
 
-// @desc    Staff creates an on-spot bay booking for a walk-in customer with immediate payment
-// @route   POST /api/staff/book-customer
-// @access  Private (Staff)
 exports.createWalkInBooking = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const staff = await User.findById(req.user.id).session(session);
+    const staff = await User.findById(req.user.id).populate('assignedFacility');
     if (!staff || !staff.assignedFacility) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({ success: false, message: 'Staff operator has no assigned facility.' });
     }
 
-    const {
-      bayId,
-      floorId,
-      customerName,
-      customerPhone,
-      customerEmail,
-      vehicleRegNumber,
-      vehicleType,
-      durationHours,
-      paymentMethod = 'cash',
-    } = req.body;
+    const facility = staff.assignedFacility;
+    const shiftInfo = getActiveShiftDetails(facility.name);
+    const userSlot = (staff.shiftSlot || 'shift_1').toLowerCase();
 
-    const facility = await ParkingLocation.findById(staff.assignedFacility).session(session);
-    if (!facility) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ success: false, message: 'Assigned facility not found.' });
-    }
+    // STRICT DUTY CHECK: Block booking if outside operator's shift window
+    const isOnDuty = Boolean(shiftInfo.activeSlot && userSlot === shiftInfo.activeSlot);
 
-    const reqStart = new Date();
-    const parsedDuration = Math.max(1, Number(durationHours) || 1);
-    const reqEnd = new Date(reqStart.getTime() + parsedDuration * 60 * 60 * 1000);
-
-    const bay = await ParkingBay.findOneAndUpdate(
-      {
-        _id: bayId,
-        location: facility._id,
-        floor: floorId,
-        status: { $ne: 'maintenance' },
-        isEnabled: { $ne: false },
-      },
-      { $inc: { __v: 1 } },
-      { session, new: true }
-    );
-
-    if (!bay) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ success: false, message: 'Selected parking bay is unavailable or under maintenance.' });
-    }
-
-    const existingConflict = await Booking.findOne({
-      bay: bayId,
-      status: { $in: ['confirmed', 'active', 'pending'] },
-      $and: [
-        { startTime: { $lt: reqEnd } },
-        { endTime: { $gt: reqStart } },
-      ],
-    }).session(session);
-
-    if (existingConflict) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(409).json({
+    if (!isOnDuty) {
+      return res.status(403).json({
         success: false,
-        message: 'Bay conflict: This bay was just occupied. Please select another slot.',
+        message: `Duty Window Locked: You are currently off duty. Reservations can only be issued by the rostered staff member during their active shift window (${shiftInfo.label || 'Active Shift'}).`,
       });
     }
 
-    const hourlyRateRupees = bay.customHourlyRate ?? facility.pricing?.hourlyRate ?? 30;
-    const baseFeeRupees = facility.pricing?.baseRate || 0;
-    const hourlyRatePaise = Math.round(hourlyRateRupees * 100);
-    const baseFeePaise = Math.round(baseFeeRupees * 100);
-    const totalAmountPaise = (parsedDuration * hourlyRatePaise) + baseFeePaise;
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    const bookingRef = `KSP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const qrTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    try {
+      const {
+        bayId,
+        floorId,
+        customerName,
+        customerPhone,
+        customerEmail,
+        vehicleRegNumber,
+        vehicleType,
+        durationHours,
+        paymentMethod = 'cash',
+      } = req.body;
 
-    let targetUserId = req.user.id;
-    if (customerEmail) {
-      const existingCust = await User.findOne({ email: customerEmail.toLowerCase().trim() }).session(session);
-      if (existingCust) targetUserId = existingCust._id;
-    }
+      const reqStart = new Date();
+      const parsedDuration = Math.max(1, Number(durationHours) || 1);
+      const reqEnd = new Date(reqStart.getTime() + parsedDuration * 60 * 60 * 1000);
 
-    // Schema Enum Guard: Dynamically inspect Booking schema's enum allowed values
-    const allowedPaymentEnums = Booking.schema.path('paymentMethod')?.enumValues || ['pay_at_facility', 'razorpay'];
-    let safePaymentMethod = 'pay_at_facility';
-
-    if (allowedPaymentEnums.includes(paymentMethod)) {
-      safePaymentMethod = paymentMethod;
-    } else if (allowedPaymentEnums.includes('pay_at_facility')) {
-      safePaymentMethod = 'pay_at_facility';
-    } else {
-      safePaymentMethod = allowedPaymentEnums[0];
-    }
-
-    const [booking] = await Booking.create(
-      [
+      const bay = await ParkingBay.findOneAndUpdate(
         {
-          bookingRef,
-          user: targetUserId,
+          _id: bayId,
           location: facility._id,
           floor: floorId,
-          bay: bayId,
-          vehicle: {
-            regNumber: vehicleRegNumber.toUpperCase().trim(),
-            vehicleType: vehicleType || 'car',
-          },
-          startTime: reqStart,
-          endTime: reqEnd,
-          actualCheckInTime: reqStart,
-          status: 'active',
-          pricingSnapshot: {
-            hourlyRatePaise,
-            baseFeePaise,
-            durationHours: parsedDuration,
-            totalAmountPaise,
-          },
-          paymentStatus: 'paid', // Immediately settled via Cash or Test UPI
-          paymentMethod: safePaymentMethod,
-          amountCollectedPaise: totalAmountPaise,
-          qrTokenHash,
-          bookedByStaff: staff._id,
+          status: { $ne: 'maintenance' },
+          isEnabled: { $ne: false },
         },
-      ],
-      { session }
-    );
+        { $inc: { __v: 1 } },
+        { session, new: true }
+      );
 
-    // Audit log stores the exact staff settlement mode (cash or upi_qr)
-    await StaffActivityLog.create(
-      [
-        {
-          staff: staff._id,
-          facility: facility._id,
-          actionType: 'qr_check_in',
-          shiftSlot: staff.shiftSlot || 'shift_1',
-          details: `Walk-in pass issued (${paymentMethod.toUpperCase()}): Bay ${bay.bayNumber} for ${vehicleRegNumber} (Fee: ₹${totalAmountPaise / 100})`,
+      if (!bay) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ success: false, message: 'Selected parking bay is unavailable or under maintenance.' });
+      }
+
+      const existingConflict = await Booking.findOne({
+        bay: bayId,
+        status: { $in: ['confirmed', 'active', 'pending'] },
+        $and: [
+          { startTime: { $lt: reqEnd } },
+          { endTime: { $gt: reqStart } },
+        ],
+      }).session(session);
+
+      if (existingConflict) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(409).json({
+          success: false,
+          message: 'Bay conflict: This bay was just occupied. Please select another slot.',
+        });
+      }
+
+      const hourlyRateRupees = bay.customHourlyRate ?? facility.pricing?.hourlyRate ?? 30;
+      const baseFeeRupees = facility.pricing?.baseRate || 0;
+      const hourlyRatePaise = Math.round(hourlyRateRupees * 100);
+      const baseFeePaise = Math.round(baseFeeRupees * 100);
+      const totalAmountPaise = (parsedDuration * hourlyRatePaise) + baseFeePaise;
+
+      const bookingRef = `KSP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const qrTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      let targetUserId = req.user.id;
+      if (customerEmail) {
+        const existingCust = await User.findOne({ email: customerEmail.toLowerCase().trim() }).session(session);
+        if (existingCust) targetUserId = existingCust._id;
+      }
+
+      const allowedPaymentEnums = Booking.schema.path('paymentMethod')?.enumValues || ['pay_at_facility', 'razorpay'];
+      let safePaymentMethod = 'pay_at_facility';
+
+      if (allowedPaymentEnums.includes(paymentMethod)) {
+        safePaymentMethod = paymentMethod;
+      } else if (allowedPaymentEnums.includes('pay_at_facility')) {
+        safePaymentMethod = 'pay_at_facility';
+      } else {
+        safePaymentMethod = allowedPaymentEnums[0];
+      }
+
+      const [booking] = await Booking.create(
+        [
+          {
+            bookingRef,
+            user: targetUserId,
+            location: facility._id,
+            floor: floorId,
+            bay: bayId,
+            vehicle: {
+              regNumber: vehicleRegNumber.toUpperCase().trim(),
+              vehicleType: vehicleType || 'car',
+            },
+            startTime: reqStart,
+            endTime: reqEnd,
+            actualCheckInTime: reqStart,
+            status: 'active',
+            pricingSnapshot: {
+              hourlyRatePaise,
+              baseFeePaise,
+              durationHours: parsedDuration,
+              totalAmountPaise,
+            },
+            paymentStatus: 'paid',
+            paymentMethod: safePaymentMethod,
+            amountCollectedPaise: totalAmountPaise,
+            qrTokenHash,
+            bookedByStaff: staff._id,
+          },
+        ],
+        { session }
+      );
+
+      await StaffActivityLog.create(
+        [
+          {
+            staff: staff._id,
+            facility: facility._id,
+            actionType: 'qr_check_in',
+            shiftSlot: staff.shiftSlot || 'shift_1',
+            details: `Walk-in pass issued (${paymentMethod.toUpperCase()}): Bay ${bay.bayNumber} for ${vehicleRegNumber} (Fee: ₹${totalAmountPaise / 100})`,
+          },
+        ],
+        { session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      const populated = await Booking.findById(booking._id)
+        .populate('location', 'name address pricing')
+        .populate('floor', 'name level')
+        .populate('bay', 'bayNumber supportedVehicleType')
+        .lean();
+
+      res.status(201).json({
+        success: true,
+        message: 'Walk-in booking created and vehicle checked in.',
+        data: {
+          ...populated,
+          paymentMethod: paymentMethod,
+          qrTicketPayload: `${bookingRef}:${rawToken}`,
         },
-      ],
-      { session }
-    );
-
-    await session.commitTransaction();
-    session.endSession();
-
-    const populated = await Booking.findById(booking._id)
-      .populate('location', 'name address pricing')
-      .populate('floor', 'name level')
-      .populate('bay', 'bayNumber supportedVehicleType')
-      .lean();
-
-    res.status(201).json({
-      success: true,
-      message: 'Walk-in booking created and vehicle checked in.',
-      data: {
-        ...populated,
-        paymentMethod: paymentMethod, // Return human-readable label to frontend
-        qrTicketPayload: `${bookingRef}:${rawToken}`,
-      },
-    });
+      });
+    } catch (innerError) {
+      await session.abortTransaction();
+      session.endSession();
+      throw innerError;
+    }
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.status || 500).json({ success: false, message: error.message });
   }
 };
-
 // @desc    Get all reservations made today for this staff member's facility
 // @route   GET /api/staff/today-bookings
 // @access  Private (Staff)

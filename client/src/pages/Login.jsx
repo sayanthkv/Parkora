@@ -23,17 +23,21 @@ export default function Login() {
     try {
       const user = await login(email, password);
 
-      // Prioritize explicit booking deep-links for customers only
-      if (user?.role === 'customer' && redirectParam && redirectParam !== '/' && redirectParam !== '/staff') {
-        navigate(redirectParam, { replace: true });
+      // 1. Staff strictly lands on their Staff Home portal
+      if (user?.role === 'staff') {
+        navigate('/staff', { replace: true });
         return;
       }
 
-      // Role-based distinct landing page routing
+      // 2. Admin strictly lands on Admin Console
       if (user?.role === 'admin') {
         navigate('/admin', { replace: true });
-      } else if (user?.role === 'staff') {
-        navigate('/staff', { replace: true });
+        return;
+      }
+
+      // 3. Customer handles deep-link or defaults to /locations
+      if (redirectParam && !redirectParam.startsWith('/staff') && !redirectParam.startsWith('/admin')) {
+        navigate(redirectParam, { replace: true });
       } else {
         navigate('/locations', { replace: true });
       }

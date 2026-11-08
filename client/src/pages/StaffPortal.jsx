@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import API from '../api/axios';
 import {
   QrCode, Search, CheckCircle2, XCircle, Clock,
-  Car, User, ShieldCheck, ArrowRight, AlertTriangle, RefreshCw, Activity, ArrowLeftRight, Building, Check, ToggleLeft, ToggleRight
+  Car, User, ShieldCheck, ArrowRight, AlertTriangle, RefreshCw, Activity, ArrowLeftRight, Building, Check, ToggleLeft, ToggleRight, Lock
 } from 'lucide-react';
 
 export default function StaffPortal() {
@@ -87,6 +87,10 @@ export default function StaffPortal() {
 
   const handleVerify = async (e) => {
     if (e) e.preventDefault();
+    if (!isOnDuty) {
+      setError('Verification Locked: You cannot verify or scan tickets while off duty.');
+      return;
+    }
     if (!searchQuery.trim()) return;
 
     setLoadingVerify(true);
@@ -117,6 +121,10 @@ export default function StaffPortal() {
   };
 
   const handleCheckIn = async (bookingId) => {
+    if (!isOnDuty) {
+      setError('Off-Duty Guard: Only on-duty staff can record vehicle arrivals.');
+      return;
+    }
     setLoadingAction(true);
     setError(null);
     try {
@@ -145,6 +153,10 @@ export default function StaffPortal() {
   };
 
   const handleCheckOut = async (bookingId) => {
+    if (!isOnDuty) {
+      setError('Off-Duty Guard: Only on-duty staff can finalize vehicle checkouts.');
+      return;
+    }
     setLoadingAction(true);
     setError(null);
     try {
@@ -198,7 +210,6 @@ export default function StaffPortal() {
     ? new Date(bookingData.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
     : '--:--';
 
-  // Overstay calculations (with strict 7-minute grace window)
   const now = new Date();
   const endTime = bookingData?.endTime ? new Date(bookingData.endTime) : null;
   const overstayMinutes = (bookingData?.status === 'active' && endTime)
@@ -267,7 +278,6 @@ export default function StaffPortal() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Simulation Toggle Switch */}
           <button
             onClick={handleToggleAutoComplete}
             disabled={togglingAuto}
@@ -297,7 +307,14 @@ export default function StaffPortal() {
         {/* Verification Column */}
         <div className="lg:col-span-7 space-y-6">
           <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-            <h2 className="text-base font-heading font-bold text-slate-900">Verify Ticket or QR Token</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-heading font-bold text-slate-900">Verify Ticket or QR Token</h2>
+              {!isOnDuty && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-lg">
+                  <Lock className="w-3.5 h-3.5" /> Verification Disabled (Off Duty)
+                </span>
+              )}
+            </div>
 
             <form onSubmit={handleVerify} className="space-y-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -308,17 +325,18 @@ export default function StaffPortal() {
                   <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="e.g. KSP-123456-789 or QR Payload..."
+                    disabled={!isOnDuty}
+                    placeholder={isOnDuty ? "e.g. KSP-123456-789 or QR Payload..." : "Terminal locked: only on-duty operators can verify"}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm uppercase font-mono font-bold tracking-wider text-slate-900 outline-none focus:border-[#0B3D2E]"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm uppercase font-mono font-bold tracking-wider text-slate-900 outline-none focus:border-[#0B3D2E] disabled:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
                     required
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={loadingVerify}
-                  className="px-6 py-2.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                  disabled={loadingVerify || !isOnDuty}
+                  className="px-6 py-2.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
                   {loadingVerify ? 'Verifying...' : 'Verify'}
                 </button>
@@ -437,10 +455,10 @@ export default function StaffPortal() {
                   {bookingData.status === 'confirmed' && (
                     <button
                       onClick={() => handleCheckIn(bookingData._id)}
-                      disabled={loadingAction || !verificationResult?.isValid}
+                      disabled={loadingAction || !verificationResult?.isValid || !isOnDuty}
                       className="w-full py-3.5 bg-[#0B3D2E] hover:bg-[#145C43] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                     >
-                      {loadingAction ? 'Processing...' : 'Approve & Record Check-In'}
+                      {loadingAction ? 'Processing...' : isOnDuty ? 'Approve & Record Check-In' : 'Action Locked (Off Duty)'}
                       <ArrowRight className="w-4 h-4 text-[#F2B705]" />
                     </button>
                   )}
@@ -448,14 +466,16 @@ export default function StaffPortal() {
                   {bookingData.status === 'active' && (
                     <button
                       onClick={() => handleCheckOut(bookingData._id)}
-                      disabled={loadingAction}
+                      disabled={loadingAction || !isOnDuty}
                       className={`w-full py-3.5 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 text-white ${
-                        isOverstay 
+                        !isOnDuty 
+                          ? 'bg-slate-400 cursor-not-allowed opacity-60' 
+                          : isOverstay 
                           ? 'bg-amber-700 hover:bg-amber-800' 
                           : 'bg-[#0B3D2E] hover:bg-[#145C43]'
                       }`}
                     >
-                      {loadingAction ? 'Finalizing Exit...' : isOverstay ? `Collect ₹${penaltyRupees} Overstay & Exit` : 'Complete Checkout (No Extra Fee)'}
+                      {loadingAction ? 'Finalizing Exit...' : !isOnDuty ? 'Checkout Locked (Off Duty)' : isOverstay ? `Collect ₹${penaltyRupees} Overstay & Exit` : 'Complete Checkout (No Extra Fee)'}
                       <Check className="w-4 h-4 text-[#F2B705]" />
                     </button>
                   )}
@@ -493,10 +513,14 @@ export default function StaffPortal() {
                     <div
                       key={session._id}
                       onClick={() => {
-                        setSearchQuery(session.bookingRef);
-                        handleVerify();
+                        if (isOnDuty) {
+                          setSearchQuery(session.bookingRef);
+                          handleVerify();
+                        }
                       }}
-                      className="p-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors"
+                      className={`p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                        isOnDuty ? 'hover:bg-slate-100 cursor-pointer' : 'cursor-default opacity-80'
+                      }`}
                     >
                       <div>
                         <span className="font-mono font-bold uppercase text-slate-900">{session.vehicle?.regNumber}</span>
